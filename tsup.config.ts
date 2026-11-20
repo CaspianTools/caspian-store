@@ -62,15 +62,17 @@ const GENERATED_BANNER =
 // Embedded stylesheet (v15.4.0): globals.css with the rules that style the
 // whole page (`body`, every `a`) scoped to the `.caspian-store` wrapper the
 // provider renders in embedded mode, so a host's own typography and links are
-// left alone. Committed, like the other generated files, so the export exists
+// left alone. The link rules only reach class-less links: a host header drawn
+// inside the wrapper (its links carry utility classes) keeps its own colours,
+// which a `.caspian-store a` rule out-ranked. Committed, like the other generated files, so the export exists
 // in a GitHub install without a build.
 {
   const globals = readText(join('src', 'styles', 'globals.css'));
   const scoped = globals
     .replace(/^body \{/m, '.caspian-store {')
-    .replace(/^a \{/m, '.caspian-store a {')
-    .replace(/^a:hover \{/m, '.caspian-store a:hover {')
-    .replace(/^a:focus-visible \{/m, '.caspian-store a:focus-visible {');
+    .replace(/^a \{/m, '.caspian-store a:not([class]) {')
+    .replace(/^a:hover \{/m, '.caspian-store a:not([class]):hover {')
+    .replace(/^a:focus-visible \{/m, '.caspian-store a:not([class]):focus-visible {');
   for (const sel of ['body {', 'a {', 'a:hover {', 'a:focus-visible {']) {
     if (scoped.split('\n').includes(sel)) throw new Error(`embedded.css: unscoped "${sel}" left in globals.css`);
   }

@@ -27,6 +27,7 @@ Found by the first embedded store (caspiantools.com/store) in its end-to-end tes
 
 ### Changed
 
+- **`embedded.css` link rules only reach class-less links.** A host header drawn inside the store's wrapper keeps its own link colours; before, `.caspian-store a` turned a host's white button label dark.
 - **Embedded stores leave out the store's header and footer by default.** In embedded mode the store renders in the host page's body, under the host's own header. Pass `header` / `footer` to `CaspianRoot` to show them anyway, for example on a subdomain store with its own look. Standalone stores are unchanged.
 
 ### Fixed
