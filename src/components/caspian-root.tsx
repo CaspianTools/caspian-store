@@ -1,7 +1,11 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useCaspianNavigation, useCaspianStandalone } from '../provider/caspian-store-provider';
+import {
+  useCaspianBasePath,
+  useCaspianNavigation,
+  useCaspianStandalone,
+} from '../provider/caspian-store-provider';
 import { getLocalePrefix, stripLocalePrefix } from '../utils/strip-locale-prefix';
 
 import { HomePage } from './home';
@@ -94,6 +98,7 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   } = props;
 
   const nav = useCaspianNavigation();
+  const basePath = useCaspianBasePath();
   const { settings } = useScriptSettings();
   const t = useT();
   const path = stripLocalePrefix(nav.pathname) || '/';
@@ -178,8 +183,8 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   if (path === '/checkout') {
     return (
       <CheckoutPage
-        successUrl={checkoutSuccessUrl ?? inferCheckoutSuccessUrl()}
-        cancelUrl={checkoutCancelUrl ?? inferCheckoutCancelUrl()}
+        successUrl={checkoutSuccessUrl ?? inferCheckoutSuccessUrl(basePath)}
+        cancelUrl={checkoutCancelUrl ?? inferCheckoutCancelUrl(basePath)}
         currency={settings.defaultCurrency}
       />
     );
@@ -269,17 +274,18 @@ function toTitle(key: string): string {
 // The payment provider redirects with a full URL, which no Link adapter ever
 // sees, so the locale segment the shopper is browsing under (`/fr/checkout`)
 // has to be carried over here or they come back in the default language.
-function currentOriginAndLocale(): string {
+// The base path (`/store`) is added for the same reason.
+function currentOriginAndLocale(basePath: string): string {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}${getLocalePrefix(window.location.pathname)}`;
+  return `${window.location.origin}${getLocalePrefix(window.location.pathname)}${basePath}`;
 }
 
-function inferCheckoutSuccessUrl(): string {
-  return `${currentOriginAndLocale()}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
+function inferCheckoutSuccessUrl(basePath: string): string {
+  return `${currentOriginAndLocale(basePath)}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
 }
 
-function inferCheckoutCancelUrl(): string {
-  return `${currentOriginAndLocale()}/checkout`;
+function inferCheckoutCancelUrl(basePath: string): string {
+  return `${currentOriginAndLocale(basePath)}/checkout`;
 }
 
 /**

@@ -28,6 +28,7 @@ import { DEFAULT_SCRIPT_SETTINGS, type ScriptSettings } from '../types';
 import { ErrorBoundary } from '../components/error-boundary';
 import { logError } from '../services/error-log-service';
 import { getLocalePrefix, stripLocalePrefix, withLocalePrefix } from '../utils/strip-locale-prefix';
+import { normalizeBasePath, stripBasePath, withBasePath } from '../utils/base-path';
 import { registerCaspianServerApi } from '../services/caspian-callable';
 
 /**
@@ -116,6 +117,13 @@ export interface CaspianStoreProviderProps {
    */
   localeInUrl?: boolean;
   /**
+   * Sub-path the store is mounted under in the host app, e.g. `/store`. Every
+   * library link and navigation gains it, the pathname the store routes on
+   * loses it, and the default Stripe return URLs include it. Combine with
+   * `localeInUrl` for `/fr/store/cart`. Default: the site root. v15.4.0.
+   */
+  basePath?: string;
+  /**
    * URL of the host's server API (`caspianHandleApi` from the `./server`
    * entry), usually `/api/caspian-store`. When set, the Cloud Functions
    * callables (checkout, admin roles, guest-order lookup, …) run there
@@ -149,6 +157,8 @@ export interface CaspianStoreContextValue {
   serverApi: string | null;
   /** True when mounted with the `embedded` prop. */
   embedded: boolean;
+  /** Normalised `basePath` prop (`/store`), or `''` at the site root. */
+  basePath: string;
 }
 
 const CaspianStoreContext = createContext<CaspianStoreContextValue | null>(null);
@@ -195,6 +205,7 @@ export function CaspianStoreProvider({
   functionsRegion,
   adapters,
   localeInUrl = false,
+  basePath: basePathProp,
   serverApi,
   appName,
   locale,
@@ -208,7 +219,10 @@ export function CaspianStoreProvider({
       Image: adapters?.Image ?? DefaultCaspianImage,
       useNavigation: adapters?.useNavigation ?? useDefaultCaspianNavigation,
     };
-    const resolvedAdapters = localeInUrl ? withLocaleInUrl(baseAdapters) : baseAdapters;
+    const basePath = normalizeBasePath(basePathProp);
+    // Base path outermost: `/cart` → `/store/cart` → (locale) `/fr/store/cart`.
+    const localeAdapters = localeInUrl ? withLocaleInUrl(baseAdapters) : baseAdapters;
+    const resolvedAdapters = basePath ? withBasePathAdapters(localeAdapters, basePath) : localeAdapters;
     if (standalone) {
       return {
         firebase: null,
@@ -217,6 +231,7 @@ export function CaspianStoreProvider({
         standalone: true,
         serverApi: null,
         embedded: false,
+        basePath,
       };
     }
     if (embedded) {
@@ -234,6 +249,7 @@ export function CaspianStoreProvider({
         standalone: false,
         serverApi: serverApi ?? null,
         embedded: true,
+        basePath,
       };
     }
     const resolvedConfig = resolveFirebaseConfig(firebaseConfig ?? {});
@@ -251,6 +267,7 @@ export function CaspianStoreProvider({
       standalone: false,
       serverApi: serverApi ?? null,
       embedded: false,
+      basePath,
     };
     // Intentionally stable per mount; consumers should not swap these at runtime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -456,6 +473,30 @@ function withLocaleInUrl(base: FrameworkAdapters): FrameworkAdapters {
     };
   }
   return { ...base, Link: LocaleLink, useNavigation: useLocaleNavigation };
+}
+
+/** Same idea as `withLocaleInUrl`, for the `basePath` prop. */
+function withBasePathAdapters(base: FrameworkAdapters, basePath: string): FrameworkAdapters {
+  const BaseLink = base.Link;
+  const useBaseNavigation = base.useNavigation;
+  function BasePathLink(props: CaspianLinkProps) {
+    return <BaseLink {...props} href={withBasePath(props.href, basePath)} />;
+  }
+  function useBasePathNavigation(): CaspianNavigation {
+    const nav = useBaseNavigation();
+    return {
+      ...nav,
+      pathname: stripBasePath(nav.pathname, basePath),
+      push: (href: string) => nav.push(withBasePath(href, basePath)),
+      replace: (href: string) => nav.replace(withBasePath(href, basePath)),
+    };
+  }
+  return { ...base, Link: BasePathLink, useNavigation: useBasePathNavigation };
+}
+
+/** The `basePath` the store is mounted under (`/store`), or `''`. */
+export function useCaspianBasePath(): string {
+  return useCaspianStore().basePath;
 }
 
 /** The host's server API URL (`serverApi` prop), or null. */

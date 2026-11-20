@@ -11,6 +11,7 @@ export {
   useCaspianFirebase,
   useCaspianFirebaseOptional,
   useCaspianStandalone,
+  useCaspianBasePath,
   STORE_ADMIN_CLAIM,
   type CaspianEmbedOptions,
   type CaspianStoreProviderProps,
@@ -19,6 +20,7 @@ export {
 
 // --- Hooks / contexts ---
 export { useAuth } from './context/auth-context';
+export { normalizeBasePath, stripBasePath, withBasePath } from './utils/base-path';
 export { useCart } from './context/cart-context';
 export { useScriptSettings } from './context/script-settings-context';
 
