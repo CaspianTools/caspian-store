@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { CartBehavior, InventorySettings, Product, ProductImage, TaxConfig } from '../../types';
+import { isDigitalProduct, type CartBehavior, type InventorySettings, type Product, type ProductImage, type TaxConfig } from '../../types';
 import { getProductBySlugOrId } from '../../services/product-service';
 import { getSiteSettings } from '../../services/site-settings-service';
 import { getApprovedReviewsForProduct } from '../../services/review-service';
@@ -178,6 +178,25 @@ export function useProductDetailState({
         inventoryActive: false,
         outOfStockSizes: [] as string[],
         allOut: false,
+        isDigital: false,
+      };
+    }
+    // Digital products have no sizes, colours or stock, and sell one copy.
+    if (isDigitalProduct(product)) {
+      const hasDetails = Boolean(product.details && product.details.trim());
+      const hasLongDescription = Boolean(
+        product.description && product.description.trim() && product.description.trim() !== blurb,
+      );
+      return {
+        hasSizes: false,
+        hasColors: false,
+        hasDetails,
+        hasLongDescription,
+        detailsTabHasContent: hasDetails || hasLongDescription,
+        inventoryActive: false,
+        outOfStockSizes: [] as string[],
+        allOut: false,
+        isDigital: true,
       };
     }
     const hasSizes = !!(product.sizes && product.sizes.length > 0);
@@ -202,6 +221,7 @@ export function useProductDetailState({
       inventoryActive,
       outOfStockSizes,
       allOut,
+      isDigital: false,
     };
   }, [product, blurb, inventory]);
 
@@ -240,7 +260,7 @@ export function useProductDetailState({
       toast({ title: t('product.sizeOutOfStock'), variant: 'destructive' });
       return;
     }
-    addToCart(product, quantity, selectedSize, derived.hasColors ? selectedColor : undefined);
+    addToCart(product, derived.isDigital ? 1 : quantity, selectedSize, derived.hasColors ? selectedColor : undefined);
     toast({ title: t('product.addedToCart'), description: product.name, variant: 'success' });
     setQuantity(1);
     if (cartBehavior?.redirectToCartAfterAdd) {
@@ -261,7 +281,9 @@ export function useProductDetailState({
 
   const stickyHint = !product
     ? ''
-    : derived.hasSizes && !selectedSize
+    : derived.isDigital
+      ? t('product.digital.label')
+      : derived.hasSizes && !selectedSize
       ? t('product.selectSize')
       : derived.inventoryActive && derived.allOut
         ? t('storefront.stock.outOfStock')

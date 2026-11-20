@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import type { CartItem } from '../types';
+import { isDigitalProduct, type CartItem } from '../types';
+import { DigitalDownloadBadge } from './digital-download-badge';
 import { useCart } from '../context/cart-context';
 import { useScriptSettings } from '../context/script-settings-context';
 import { useCaspianImage, useCaspianLink } from '../provider/caspian-store-provider';
@@ -416,6 +417,9 @@ function CartItemCard({
             marginTop: 'auto',
           }}
         >
+          {isDigitalProduct(item.product) ? (
+            <DigitalDownloadBadge />
+          ) : (
           <div
             style={{
               display: 'inline-flex',
@@ -455,6 +459,7 @@ function CartItemCard({
               +
             </button>
           </div>
+          )}
           <div style={{ fontSize: 18, fontWeight: 600, whiteSpace: 'nowrap' }}>
             {formatPrice(item.product.price * item.quantity)}
           </div>

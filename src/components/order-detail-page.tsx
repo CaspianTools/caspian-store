@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Order } from '../types';
+import { DIGITAL_DOWNLOAD_SHIPPING_METHOD, type Order } from '../types';
+import { OrderDownloads } from './order-downloads';
 import { getOrderById } from '../services/order-service';
 import { useAuth } from '../context/auth-context';
 import { useScriptSettings } from '../context/script-settings-context';
@@ -187,6 +188,12 @@ export function OrderDetailPage({
         <SummaryRow label={t('orderConfirmation.total')} value={formatPrice(order.total)} strong />
       </section>
 
+      {(order.downloads?.length ?? 0) > 0 && (
+        <div style={{ ...sectionStyle, marginTop: 16 }}>
+          <OrderDownloads order={order} />
+        </div>
+      )}
+
       <div
         style={{
           display: 'grid',
@@ -228,7 +235,14 @@ export function OrderDetailPage({
               />
             )}
             {ship?.shippingMethod && (
-              <SummaryRow label={t('orderConfirmation.shippingMethod')} value={ship.shippingMethod} />
+              <SummaryRow
+                label={t('orderConfirmation.shippingMethod')}
+                value={
+                  ship.shippingMethod === DIGITAL_DOWNLOAD_SHIPPING_METHOD
+                    ? t('product.digital.label')
+                    : ship.shippingMethod
+                }
+              />
             )}
           </section>
         )}

@@ -222,7 +222,8 @@ type ClearableProductKey =
   | 'color'
   | 'colorVariants'
   | 'taxonomies'
-  | 'stock';
+  | 'stock'
+  | 'downloadLimit';
 
 /**
  * Update payload. Clearable optional fields additionally accept

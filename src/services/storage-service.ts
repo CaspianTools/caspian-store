@@ -4,6 +4,7 @@ import {
   getDownloadURL,
   ref,
   uploadBytes,
+  uploadBytesResumable,
   type FirebaseStorage,
 } from 'firebase/storage';
 import {
@@ -135,6 +136,67 @@ export async function uploadAdminImage({
     }
   }
   return await getDownloadURL(storageRef);
+}
+
+export const MAX_ADMIN_FILE_BYTES = 500 * 1024 * 1024;
+
+/**
+ * Upload a file of any content type for an admin surface (digital product
+ * downloads under `downloads/{productId}/{fileId}`, v15.4.0). Same
+ * unauthorized-retry self-heal as {@link uploadAdminImage}, but resumable so
+ * large files report progress. Returns no URL: download objects are private
+ * and buyers get signed links from the `getDownloadUrl` callable.
+ */
+export async function uploadAdminFile({
+  storage,
+  path,
+  file,
+  auth,
+  functions,
+  maxBytes = MAX_ADMIN_FILE_BYTES,
+  onProgress,
+}: {
+  storage: FirebaseStorage;
+  path: string;
+  file: File;
+  auth?: Auth;
+  functions?: Functions;
+  maxBytes?: number;
+  /** Fraction uploaded, 0 to 1. */
+  onProgress?: (fraction: number) => void;
+}): Promise<{ size: number; contentType: string }> {
+  if (file.size > maxBytes) {
+    throw new Error(`File must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+  }
+  const contentType = file.type || 'application/octet-stream';
+  const storageRef = ref(storage, storeStoragePath(storage, path));
+  const run = () =>
+    new Promise<void>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, file, { contentType });
+      task.on(
+        'state_changed',
+        (snap) => {
+          if (snap.totalBytes > 0) onProgress?.(snap.bytesTransferred / snap.totalBytes);
+        },
+        reject,
+        () => resolve(),
+      );
+    });
+  try {
+    await run();
+  } catch (err) {
+    if (isUnauthorized(err) && auth?.currentUser) {
+      if (functions) {
+        await tryEnsureAdminClaim({ functions, auth });
+      } else {
+        await auth.currentUser.getIdToken(true);
+      }
+      await run();
+    } else {
+      throw err;
+    }
+  }
+  return { size: file.size, contentType };
 }
 
 /**

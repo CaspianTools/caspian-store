@@ -227,6 +227,9 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   if (path === '/order-status') return <GuestOrderLookupPage />;
 
   if (path === '/account') return <AccountPage />;
+  // Keyed so moving between /account and /account/downloads remounts the
+  // page with the right section instead of keeping the old one open.
+  if (path === '/account/downloads') return <AccountPage key="downloads" section="downloads" />;
   if (path === '/login' || path === '/auth/login') return <LoginPage />;
   if (path === '/register' || path === '/auth/register') return <RegisterPage />;
   if (path === '/forgot-password' || path === '/auth/forgot-password') return <ForgotPasswordPage />;

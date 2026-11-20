@@ -1,14 +1,18 @@
 'use client';
 
 import { cloneElement, isValidElement, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { deleteField } from 'firebase/firestore';
+import { deleteField, doc } from 'firebase/firestore';
 import type {
   ColorVariant,
   ProductBrandDoc,
   ProductCategoryDoc,
+  ProductFile,
   ProductImage,
+  ProductKind,
   TaxonomyTermDoc,
 } from '../types';
+import { caspianCollections } from '../firebase/collections';
+import { deleteStorageObject } from '../services/storage-service';
 import {
   createProduct,
   getProductById,
@@ -39,6 +43,7 @@ import { RichTextEditor } from '../ui/rich-text-editor';
 import { Select } from '../ui/select';
 import { useToast } from '../ui/toast';
 import { MultiSelect, type MultiSelectItem } from './admin-multi-select';
+import { AdminProductFilesField } from './admin-product-files-field';
 import { isValidImageUrl, validateProductDraft } from './product-validation';
 
 export interface AdminProductEditorProps {
@@ -91,6 +96,12 @@ interface FormState {
   images: ProductImage[];
   /** Image-swatch colour variants (`Product.colorVariants`), in display order. */
   colorVariants: ColorVariantDraft[];
+  /** v15.4.0. Digital products hide sizes, stock, weight and colour variants. */
+  kind: ProductKind;
+  /** Downloadable files (digital only). */
+  files: ProductFile[];
+  /** Downloads per file per order as an input string; blank = unlimited. */
+  downloadLimit: string;
 }
 
 /** A colour variant plus a client-only React key (stripped on save). */
@@ -135,6 +146,9 @@ const empty: FormState = {
   isActive: true,
   images: [],
   colorVariants: [],
+  kind: 'physical',
+  files: [],
+  downloadLimit: '',
 };
 
 function parseSizeList(raw: string): string[] {
@@ -206,7 +220,7 @@ export function AdminProductEditor({
   afterSaveHref = '/admin/products',
   className,
 }: AdminProductEditorProps) {
-  const { db } = useCaspianFirebase();
+  const { db, storage } = useCaspianFirebase();
   const nav = useCaspianNavigation();
   const { toast } = useToast();
   const t = useT();
@@ -232,6 +246,13 @@ export function AdminProductEditor({
   /** Highest step reached — the stepper only jumps back or to reached steps. */
   const [furthestStep, setFurthestStep] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  // New products get their document id up front so digital files can be
+  // uploaded under `downloads/{id}/` before the first save.
+  const [newProductId] = useState(() => doc(caspianCollections(db).products).id);
+  const effectiveId = productId ?? newProductId;
+  /** Paths of files saved on the product that the admin removed; deleted on save. */
+  const [removedSavedPaths, setRemovedSavedPaths] = useState<string[]>([]);
+  const savedFilePaths = useRef<Set<string>>(new Set());
 
   // Remembered layout preference. Read after mount so SSR markup matches.
   useEffect(() => {
@@ -341,7 +362,11 @@ export function AdminProductEditor({
             name: v.name ?? '',
             imageUrl: v.imageUrl ?? '',
           })),
+          kind: p.kind === 'digital' ? 'digital' : 'physical',
+          files: p.files ?? [],
+          downloadLimit: p.downloadLimit ? String(p.downloadLimit) : '',
         });
+        savedFilePaths.current = new Set((p.files ?? []).map((f) => f.storagePath));
       } catch (error) {
         console.error('[caspian-store] Failed to load product:', error);
         if (!alive) return;
@@ -502,6 +527,20 @@ export function AdminProductEditor({
       return { ...s, colorVariants: next };
     });
 
+  const handleAddFile = (file: ProductFile) =>
+    setForm((s) => ({ ...s, files: [...s.files, file] }));
+
+  const handleRemoveFile = (file: ProductFile) => {
+    setForm((s) => ({ ...s, files: s.files.filter((f) => f.id !== file.id) }));
+    // A file already on the saved product stays until the save lands, so
+    // cancelling the edit leaves buyers' downloads working.
+    if (savedFilePaths.current.has(file.storagePath)) {
+      setRemovedSavedPaths((p) => [...p, file.storagePath]);
+    } else {
+      void deleteStorageObject(storage, file.storagePath);
+    }
+  };
+
   const handleRemoveImage = (id: string) => {
     setForm((s) => ({ ...s, images: s.images.filter((img) => img.id !== id) }));
   };
@@ -551,19 +590,25 @@ export function AdminProductEditor({
   };
 
   // Live validation; messages render only once `showErrors` is set.
+  const isDigital = form.kind === 'digital';
   const errors = useMemo(() => {
+    const digital = form.kind === 'digital';
     const stock: Record<string, string> = {};
     for (const size of parseSizeList(form.sizes)) stock[size] = form.sizeStock[size] ?? '';
     return validateProductDraft({
       name: form.name,
       brand: form.brand,
       price: form.price,
-      weightKg: form.weightKg,
+      weightKg: digital ? '' : form.weightKg,
       description: form.description,
       category: form.category,
       images: form.images,
       stock,
-      colorVariants: form.colorVariants,
+      colorVariants: digital ? [] : form.colorVariants,
+      kind: form.kind,
+      isActive: form.isActive,
+      files: form.files,
+      downloadLimit: form.downloadLimit,
     });
   }, [form]);
   const err = (key: string): string | undefined =>
@@ -622,11 +667,12 @@ export function AdminProductEditor({
 
     setSaving(true);
     try {
-      const weightTrimmed = form.weightKg.trim();
+      const weightTrimmed = isDigital ? '' : form.weightKg.trim();
       const weightKg = weightTrimmed === '' ? undefined : Number(weightTrimmed);
       const shortDescTrimmed = form.shortDescription.trim();
       const detailsTrimmed = form.details.trim();
-      const cleanSizes = parseSizeList(form.sizes);
+      // Digital products carry no sizes, stock or colour variants.
+      const cleanSizes = isDigital ? [] : parseSizeList(form.sizes);
       // Persist stock entries only for sizes that actually exist on the product,
       // so stale rows can't pile up after sizes are renamed/removed.
       const stockMap: Record<string, number> = {};
@@ -644,11 +690,17 @@ export function AdminProductEditor({
       for (const [type, ids] of Object.entries(form.taxonomies)) {
         if (ids && ids.length > 0) cleanedTaxonomies[type] = ids;
       }
-      const colorVariants: ColorVariant[] = form.colorVariants.map((v) => ({
+      const colorVariants: ColorVariant[] = (isDigital ? [] : form.colorVariants).map((v) => ({
         name: v.name.trim(),
         imageUrl: v.imageUrl.trim(),
       }));
+      const limitTrimmed = form.downloadLimit.trim();
+      const downloadLimit =
+        isDigital && limitTrimmed !== '' && Number(limitTrimmed) > 0 ? Number(limitTrimmed) : undefined;
       const payload: ProductWriteInput = {
+        kind: form.kind,
+        files: isDigital || form.files.length > 0 ? form.files : undefined,
+        downloadLimit,
         name: form.name.trim(),
         slug: form.slug.trim() || undefined,
         brand: form.brand.trim(),
@@ -684,13 +736,15 @@ export function AdminProductEditor({
           colorVariants: payload.colorVariants ?? deleteField(),
           taxonomies: payload.taxonomies ?? deleteField(),
           stock: payload.stock ?? deleteField(),
+          downloadLimit: payload.downloadLimit ?? deleteField(),
         };
         await updateProduct(db, productId, update);
         toast({ title: 'Product updated' });
       } else {
-        await createProduct(db, payload);
+        await createProduct(db, payload, newProductId);
         toast({ title: 'Product created' });
       }
+      await Promise.all(removedSavedPaths.map((path) => deleteStorageObject(storage, path)));
       nav.push(afterSaveHref);
     } catch (error) {
       console.error('[caspian-store] Save failed:', error);
@@ -734,6 +788,24 @@ export function AdminProductEditor({
   // form stacks them all; step-by-step mode shows the current step's slice.
   const basicFields = (
     <>
+      <Field label={t('admin.products.digital.kind')}>
+        <Select
+          value={form.kind}
+          onChange={(e) =>
+            setForm((s) => ({ ...s, kind: e.target.value === 'digital' ? 'digital' : 'physical' }))
+          }
+          options={[
+            { value: 'physical', label: t('admin.products.digital.kindPhysical') },
+            { value: 'digital', label: t('admin.products.digital.kindDigital') },
+          ]}
+          style={{ width: '100%' }}
+        />
+        {isDigital && (
+          <p style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+            {t('admin.products.digital.kindHint')}
+          </p>
+        )}
+      </Field>
       <div className="caspian-admin-grid-2" style={gridStyle}>
         <Field label="Name" fieldKey="name" error={err('name')}>
           <Input
@@ -828,16 +900,18 @@ export function AdminProductEditor({
             onChange={(e) => setForm((s) => ({ ...s, price: e.target.value }))}
           />
         </Field>
-        <Field label="Weight (kg)" fieldKey="weightKg" error={err('weightKg')}>
-          <Input
-            type="number"
-            step="0.01"
-            min="0"
-            value={form.weightKg}
-            onChange={(e) => setForm((s) => ({ ...s, weightKg: e.target.value }))}
-            placeholder="Leave blank unless using weight-based shipping"
-          />
-        </Field>
+        {!isDigital && (
+          <Field label="Weight (kg)" fieldKey="weightKg" error={err('weightKg')}>
+            <Input
+              type="number"
+              step="0.01"
+              min="0"
+              value={form.weightKg}
+              onChange={(e) => setForm((s) => ({ ...s, weightKg: e.target.value }))}
+              placeholder="Leave blank unless using weight-based shipping"
+            />
+          </Field>
+        )}
       </div>
       <div className="caspian-admin-grid-2" style={gridStyle}>
         <Field label="Category" fieldKey="category" error={err('category')}>
@@ -860,21 +934,49 @@ export function AdminProductEditor({
 
   const detailFields = (
     <>
-      <Field label="Sizes (comma-separated)">
-        <Input
-          value={form.sizes}
-          onChange={(e) => setForm((s) => ({ ...s, sizes: e.target.value }))}
-          placeholder="S, M, L, XL"
-        />
-      </Field>
-      <ProductStockGrid
-        sizes={parseSizeList(form.sizes)}
-        values={form.sizeStock}
-        errorFor={(size) => err(`stock.${size}`)}
-        onChange={(size, value) =>
-          setForm((s) => ({ ...s, sizeStock: { ...s.sizeStock, [size]: value } }))
-        }
-      />
+      {isDigital ? (
+        <>
+          <AdminProductFilesField
+            productId={effectiveId}
+            files={form.files}
+            onAdd={handleAddFile}
+            onRemove={handleRemoveFile}
+            error={err('files')}
+          />
+          <Field
+            label={t('admin.products.digital.downloadLimit')}
+            fieldKey="downloadLimit"
+            error={err('downloadLimit')}
+          >
+            <Input
+              type="number"
+              min={0}
+              step={1}
+              value={form.downloadLimit}
+              onChange={(e) => setForm((s) => ({ ...s, downloadLimit: e.target.value }))}
+              placeholder={t('admin.products.digital.downloadLimitPlaceholder')}
+            />
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label="Sizes (comma-separated)">
+            <Input
+              value={form.sizes}
+              onChange={(e) => setForm((s) => ({ ...s, sizes: e.target.value }))}
+              placeholder="S, M, L, XL"
+            />
+          </Field>
+          <ProductStockGrid
+            sizes={parseSizeList(form.sizes)}
+            values={form.sizeStock}
+            errorFor={(size) => err(`stock.${size}`)}
+            onChange={(size, value) =>
+              setForm((s) => ({ ...s, sizeStock: { ...s.sizeStock, [size]: value } }))
+            }
+          />
+        </>
+      )}
       {enabledTaxonomyIds !== null && enabledDefs.some(isAttributeTaxonomy) && (
         <div style={{ marginTop: 12 }}>
           <h2 style={h2Style}>Attributes</h2>
@@ -1212,6 +1314,24 @@ export function AdminProductEditor({
             </span>
           )}
         </ReviewRow>
+        <ReviewRow label={t('admin.products.digital.kind')}>
+          {t(isDigital ? 'admin.products.digital.kindDigital' : 'admin.products.digital.kindPhysical')}
+        </ReviewRow>
+        {isDigital && (
+          <ReviewRow label={t('admin.products.digital.filesTitle')}>
+            {form.files.length === 0
+              ? t('admin.products.review.none')
+              : form.files.map((f) => f.name).join(', ')}
+          </ReviewRow>
+        )}
+        {isDigital && (
+          <ReviewRow label={t('admin.products.digital.downloadLimit')}>
+            {Number(form.downloadLimit) > 0
+              ? form.downloadLimit.trim()
+              : t('admin.products.digital.unlimited')}
+          </ReviewRow>
+        )}
+        {!isDigital && (
         <ReviewRow label={t('admin.products.review.sizes')}>
           {reviewSizes.length === 0
             ? t('admin.products.review.none')
@@ -1222,6 +1342,8 @@ export function AdminProductEditor({
                 })
                 .join(', ')}
         </ReviewRow>
+        )}
+        {!isDigital && (
         <ReviewRow label={t('admin.products.review.colors')}>
           {form.colorVariants.length === 0 ? (
             t('admin.products.review.none')
@@ -1237,6 +1359,7 @@ export function AdminProductEditor({
             </span>
           )}
         </ReviewRow>
+        )}
         <ReviewRow label={t('admin.products.review.status')}>
           {t(form.isActive ? 'admin.products.review.active' : 'admin.products.review.hidden')}
         </ReviewRow>
@@ -1302,7 +1425,7 @@ export function AdminProductEditor({
             <>
               <section style={sectionStyle}>{detailFields}</section>
               {imagesSection}
-              {colorsSection}
+              {!isDigital && colorsSection}
             </>
           )}
           {onReview && reviewSection}
@@ -1314,7 +1437,7 @@ export function AdminProductEditor({
             {detailFields}
           </section>
           {imagesSection}
-          {colorsSection}
+          {!isDigital && colorsSection}
         </>
       )}
 

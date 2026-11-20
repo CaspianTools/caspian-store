@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { Firestore } from 'firebase/firestore';
-import type { CartItem, CartItemRef, Product } from '../types';
+import { isDigitalProduct, type CartItem, type CartItemRef, type Product } from '../types';
 import { getProductsByIds } from '../services/product-service';
 import {
   combineCartItems,
@@ -102,6 +102,8 @@ export function CartProvider({
   // deactivated is never returned, so without this the effect below would
   // re-query it on every render for as long as the page stays open.
   const requestedIds = useRef(new Set<string>());
+  const productsRef = useRef(products);
+  productsRef.current = products;
   const [loading, setLoading] = useState(true);
   // Track the prior auth identity + in-memory cart snapshot so we can carry an
   // anon shopper's lines across the anon → real sign-in transition. We can't
@@ -216,14 +218,18 @@ export function CartProvider({
   const addToCart = useCallback(
     (product: Product, quantity = 1, selectedSize?: string, selectedColor?: string) => {
       setRefs((prev) => {
-        const incoming: CartItemRef = { productId: product.id, quantity };
+        // A digital product sells one copy per line (v15.4.0).
+        const digital = isDigitalProduct(product);
+        const incoming: CartItemRef = { productId: product.id, quantity: digital ? 1 : quantity };
         if (selectedSize !== undefined) incoming.selectedSize = selectedSize;
         if (selectedColor !== undefined) incoming.selectedColor = selectedColor;
         const idx = prev.findIndex((r) => sameLine(r, incoming));
         const next =
           idx === -1
             ? [...prev, incoming]
-            : prev.map((r, i) => (i === idx ? { ...r, quantity: r.quantity + quantity } : r));
+            : prev.map((r, i) =>
+                i === idx ? { ...r, quantity: digital ? 1 : r.quantity + quantity } : r,
+              );
         void persist(next);
         return next;
       });
@@ -235,12 +241,13 @@ export function CartProvider({
 
   const updateQuantity = useCallback(
     (productId: string, quantity: number, selectedSize?: string, selectedColor?: string) => {
+      const capped = isDigitalProduct(productsRef.current[productId]) ? Math.min(quantity, 1) : quantity;
       setRefs((prev) => {
         const hit = (r: CartItemRef) => matchesLine(r, productId, selectedSize, selectedColor);
         const next =
-          quantity <= 0
+          capped <= 0
             ? prev.filter((r) => !hit(r))
-            : prev.map((r) => (hit(r) ? { ...r, quantity } : r));
+            : prev.map((r) => (hit(r) ? { ...r, quantity: capped } : r));
         void persist(next);
         return next;
       });
@@ -269,7 +276,9 @@ export function CartProvider({
     for (const r of refs) {
       const product = products[r.productId];
       if (!product) continue;
-      const line: CartItem = { product, quantity: r.quantity };
+      // Caps lines merged on sign-in, or stored before the product went digital.
+      const quantity = isDigitalProduct(product) ? Math.min(r.quantity, 1) : r.quantity;
+      const line: CartItem = { product, quantity };
       if (r.selectedSize !== undefined) line.selectedSize = r.selectedSize;
       if (r.selectedColor !== undefined) line.selectedColor = r.selectedColor;
       out.push(line);

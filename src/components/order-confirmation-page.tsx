@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type { Order } from '../types';
+import { DIGITAL_DOWNLOAD_SHIPPING_METHOD, type Order } from '../types';
+import { OrderDownloads, orderHasDeliverableDownloads } from './order-downloads';
 import { getOrderById, getOrderByStripeSession, isStripeSessionId } from '../services/order-service';
 import { useAuth } from '../context/auth-context';
 import { useCart } from '../context/cart-context';
@@ -191,6 +192,12 @@ export function OrderConfirmationPage({
         <SummaryRow label={t('orderConfirmation.total')} value={formatPrice(order.total)} strong />
       </section>
 
+      {orderHasDeliverableDownloads(order) && (
+        <div style={{ ...sectionStyle, marginTop: 16 }}>
+          <OrderDownloads order={order} />
+        </div>
+      )}
+
       {(order.payment?.method || order.shippingInfo?.shippingMethod) && (
         <section style={{ ...sectionStyle, marginTop: 16 }}>
           <h2 style={h2Style}>{t('orderConfirmation.details')}</h2>
@@ -203,7 +210,11 @@ export function OrderConfirmationPage({
           {order.shippingInfo?.shippingMethod && (
             <SummaryRow
               label={t('orderConfirmation.shippingMethod')}
-              value={order.shippingInfo.shippingMethod}
+              value={
+                order.shippingInfo.shippingMethod === DIGITAL_DOWNLOAD_SHIPPING_METHOD
+                  ? t('product.digital.label')
+                  : order.shippingInfo.shippingMethod
+              }
             />
           )}
         </section>

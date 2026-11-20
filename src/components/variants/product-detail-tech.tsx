@@ -6,6 +6,7 @@ import { HtmlContent } from '../../ui/html-content';
 import { Badge, Skeleton } from '../../ui/misc';
 import { ProductGallery } from '../product-gallery';
 import { ColorSelector, QuantitySelector, SizeSelector } from '../product-selectors';
+import { DigitalDownloadBadge } from '../digital-download-badge';
 import { ProductReviews } from '../reviews/product-reviews';
 import { RelatedProducts } from '../related-products';
 import type { ProductDetailPageProps } from '../product-detail-page';
@@ -194,10 +195,16 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
             </div>
           )}
 
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-          </div>
+          {derived.isDigital ? (
+            <div style={{ marginBottom: 16 }}>
+              <DigitalDownloadBadge />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+            </div>
+          )}
 
           <Button size="lg" onClick={handleAddToCart}>
             {t('product.addToCart')} →

@@ -166,6 +166,8 @@ export interface OrderItem {
    * `price * quantity` when computing the order subtotal. Added in v10.0.0.
    */
   lineDiscount?: number;
+  /** Set by the payment webhook on download lines (v15.4.0); nothing ships for them. */
+  digital?: boolean;
 }
 
 export interface OrderPayment {
@@ -231,6 +233,9 @@ export interface ShippingInfo {
   /** Contact number typed at checkout. Stored from v15.1; absent on older orders. */
   phone?: string;
 }
+
+/** `ShippingInfo.shippingMethod` on an order of downloads only, which ships nothing (v15.4.0). */
+export const DIGITAL_DOWNLOAD_SHIPPING_METHOD = 'digital-download';
 
 export interface Order {
   id: string;

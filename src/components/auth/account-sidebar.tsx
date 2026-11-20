@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import {
+  DownloadIcon,
   HeartIcon,
   LockIcon,
   MapPinIcon,
@@ -9,7 +10,13 @@ import {
   UserIcon,
 } from '../../ui/icons';
 
-export type AccountSection = 'profile' | 'orders' | 'addresses' | 'wishlist' | 'security';
+export type AccountSection =
+  | 'profile'
+  | 'orders'
+  | 'downloads'
+  | 'addresses'
+  | 'wishlist'
+  | 'security';
 
 export interface AccountSidebarItem {
   id: AccountSection;
@@ -100,6 +107,7 @@ export function AccountSidebar({ items, active, onSelect, className }: AccountSi
 export const ACCOUNT_SECTION_ICONS = {
   profile: <UserIcon size={16} />,
   orders: <PackageIcon size={16} />,
+  downloads: <DownloadIcon size={16} />,
   addresses: <MapPinIcon size={16} />,
   wishlist: <HeartIcon size={16} />,
   security: <LockIcon size={16} />,

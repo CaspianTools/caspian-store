@@ -63,7 +63,7 @@
     "test": "cd firebase && firebase emulators:exec --only firestore,storage \"cd .. && node --test --test-concurrency=1 firebase/rules.test.mjs firebase/embedded-rules.test.mjs\""
   },
   "peerDependencies": {
-    "firebase": "^12.0.0 || ^11.0.0 || ^10.0.0",
+    "firebase": "^13.0.0 || ^12.0.0 || ^11.0.0 || ^10.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },

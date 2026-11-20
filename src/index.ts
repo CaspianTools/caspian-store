@@ -102,6 +102,27 @@ export {
 } from './components/order-history-list';
 export { OrderDetailPage, type OrderDetailPageProps } from './components/order-detail-page';
 export {
+  OrderDownloads,
+  orderHasDeliverableDownloads,
+  type OrderDownloadsProps,
+} from './components/order-downloads';
+export {
+  AccountDownloadsPage,
+  type AccountDownloadsPageProps,
+} from './components/account-downloads-page';
+export {
+  DigitalDownloadBadge,
+  type DigitalDownloadBadgeProps,
+} from './components/digital-download-badge';
+export { getDownloadLink, type DownloadLink } from './services/download-service';
+export {
+  isDigitalProduct,
+  DIGITAL_DOWNLOAD_SHIPPING_METHOD,
+  type ProductFile,
+  type ProductKind,
+  type OrderDownload,
+} from './types';
+export {
   OrderStatusTimeline,
   type OrderStatusTimelineProps,
 } from './components/order-status-timeline';
@@ -822,6 +843,8 @@ export {
 export { ShippingRatePicker, formatDeliveryWindow, type ShippingRatePickerProps } from './components/checkout';
 export {
   uploadAdminImage,
+  uploadAdminFile,
+  MAX_ADMIN_FILE_BYTES,
   deleteStorageObject,
   diagnoseUploadDenial,
   tryEnsureAdminClaim,

@@ -8,7 +8,8 @@
  *
  * Field paths: top-level fields use their own name (`name`, `price`, …);
  * list entries are addressed by position — `images.<i>`, `stock.<size>`,
- * `colorVariants.<i>.name`, `colorVariants.<i>.imageUrl`.
+ * `colorVariants.<i>.name`, `colorVariants.<i>.imageUrl`, plus `files` and
+ * `downloadLimit` for digital products.
  */
 
 export interface ProductDraft {
@@ -24,6 +25,12 @@ export interface ProductDraft {
   /** Per-size stock as raw input values; blank means untracked. */
   stock?: Readonly<Record<string, string | number>>;
   colorVariants?: readonly { name: string; imageUrl: string }[];
+  /** `'digital'` skips stock checks and needs at least one file when active. */
+  kind?: 'physical' | 'digital';
+  isActive?: boolean;
+  files?: readonly unknown[];
+  /** Downloads per file per order; blank or 0 means unlimited. */
+  downloadLimit?: string | number;
 }
 
 export interface ProductValidationOptions {
@@ -97,7 +104,18 @@ export function validateProductDraft(
     if (!isValidImageUrl(img.url)) errors[`images.${i}`] = `${v}imageUrlInvalid`;
   });
 
-  for (const [size, raw] of Object.entries(draft.stock ?? {})) {
+  const digital = draft.kind === 'digital';
+  if (digital) {
+    if (draft.isActive !== false && (draft.files ?? []).length === 0) {
+      errors.files = `${v}filesRequired`;
+    }
+    if (!isBlank(draft.downloadLimit)) {
+      const limit = Number(String(draft.downloadLimit).trim());
+      if (!Number.isInteger(limit) || limit < 0) errors.downloadLimit = `${v}downloadLimitInvalid`;
+    }
+  }
+
+  for (const [size, raw] of digital ? [] : Object.entries(draft.stock ?? {})) {
     if (isBlank(raw)) continue;
     const qty = Number(String(raw).trim());
     if (!Number.isInteger(qty) || qty < 0) errors[`stock.${size}`] = `${v}stockInvalid`;

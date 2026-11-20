@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { CartItem } from '../types';
+import { isDigitalProduct, type CartItem } from '../types';
+import { DigitalDownloadBadge } from './digital-download-badge';
 import { useCart } from '../context/cart-context';
 import { useCaspianImage, useCaspianLink, useCaspianNavigation } from '../provider/caspian-store-provider';
 import { XIcon } from '../ui/icons';
@@ -247,6 +248,9 @@ function CartRow({
         )}
         <p style={{ fontSize: 14, fontWeight: 600, margin: '4px 0 0' }}>{formatPrice(item.product.price)}</p>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+          {isDigitalProduct(item.product) ? (
+            <DigitalDownloadBadge />
+          ) : (
           <div
             role="group"
             aria-label={t('cart.quantity')}
@@ -283,6 +287,7 @@ function CartRow({
               +
             </button>
           </div>
+          )}
           <button
             type="button"
             onClick={onRemove}
