@@ -1,5 +1,4 @@
 import {
-  doc,
   getDoc,
   getDocs,
   limit as firestoreLimit,
@@ -10,6 +9,7 @@ import {
   where,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { Order, OrderStatus } from '../types';
 
@@ -19,6 +19,34 @@ export async function getOrderById(db: Firestore, orderId: string): Promise<Orde
   const snap = await getDoc(doc(db, 'orders', orderId));
   if (!snap.exists()) return null;
   return { id: snap.id, ...(snap.data() as Omit<Order, 'id'>) };
+}
+
+/**
+ * Resolves the order the Stripe webhook wrote for a Checkout session. The
+ * webhook keys orders by `H{timestamp}`, not by session id, so the success
+ * page (which only has `?session_id=cs_…`) has to query for it. Filtering on
+ * `userId` keeps the query inside the owner-read rule on `orders`.
+ */
+export async function getOrderByStripeSession(
+  db: Firestore,
+  userId: string,
+  sessionId: string,
+): Promise<Order | null> {
+  const q = query(
+    caspianCollections(db).orders,
+    where('userId', '==', userId),
+    where('payment.stripeSessionId', '==', sessionId),
+    firestoreLimit(1),
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...(d.data() as Omit<Order, 'id'>) };
+}
+
+/** Stripe Checkout session ids (`cs_test_…` / `cs_live_…`); order ids never start this way. */
+export function isStripeSessionId(id: string): boolean {
+  return id.startsWith('cs_');
 }
 
 export async function getOrdersByUser(

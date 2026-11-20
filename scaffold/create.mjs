@@ -13,7 +13,7 @@
  *                                    #   + webhook) — admin codebase is always scaffolded
  *     [--with-email]                # also copy firebase/functions-email/ (transactional
  *                                    #   email via SendGrid/Brevo plugins — configure at
- *                                    #   /admin/plugins/email-providers after deploy)
+ *                                    #   /admin/plugins/sendgrid or /admin/plugins/brevo)
  *     [--with-instagram]            # also copy firebase/functions-instagram/ (Instagram
  *                                    #   feed + comment moderation for store staff;
  *                                    #   set META_APP_ID / META_APP_SECRET then deploy)
@@ -182,6 +182,7 @@ const ourScripts = {
   typecheck: 'tsc --noEmit',
   'firebase:deploy': 'firebase deploy',
   'firebase:sync': 'node node_modules/@caspian-explorer/script-caspian-store/firebase/scripts/sync-rules.mjs',
+  'firebase:sync-functions': 'node node_modules/@caspian-explorer/script-caspian-store/firebase/scripts/sync-functions.mjs',
   'deploy:admin': 'node node_modules/@caspian-explorer/script-caspian-store/firebase/scripts/deploy-functions.mjs --codebase caspian-admin',
   'deploy:email': 'node node_modules/@caspian-explorer/script-caspian-store/firebase/scripts/deploy-functions.mjs --codebase caspian-email',
   'deploy:stripe': 'node node_modules/@caspian-explorer/script-caspian-store/firebase/scripts/deploy-functions.mjs --codebase caspian-stripe',
@@ -203,6 +204,9 @@ const ourDeps = {
   // <=6.8.0, uuid <14) flagged critical/high by `npm audit`. 13.8.0 pulls
   // patched versions of all four.
   'firebase-admin': '^13.8.0',
+  // Card payments through the server API (/api/caspian-store). Imported by
+  // the scaffolded route so the host bundles it.
+  stripe: '^17.4.0',
 };
 const ourDevDeps = {};
 
@@ -490,6 +494,7 @@ export function Providers({ children }: { children: ReactNode }) {
         Image: CaspianNextImage,
         useNavigation: useCaspianNextNavigation,
       }}
+      serverApi="/api/caspian-store"
     >
       {children}
     </CaspianStoreProvider>
@@ -868,16 +873,27 @@ export async function POST(request: Request) {
 // `npm install` instead of asking consumers to re-scaffold or hand-edit.
 // Everything below is just the Next.js bindings (runtime + dynamic +
 // maxDuration + the POST export).
-write('src/app/api/caspian-store/update/route.ts', `import { caspianHandleSelfUpdate } from '@caspian-explorer/script-caspian-store/server';
+write('src/app/api/caspian-store/[...path]/route.ts', `import Stripe from 'stripe';
+import { caspianHandleApi } from '@caspian-explorer/script-caspian-store/server';
 
+// Server API for the store (v15.3.0+): installs security rules + indexes from
+// the admin, runs checkout / admin-role / guest-order calls and the Stripe
+// webhook (/api/caspian-store/stripe/webhook), and the /admin/about Update
+// button. Runs on this host's own Google credentials — no Cloud Functions.
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
-export async function POST(req: Request) {
-  return caspianHandleSelfUpdate(req);
-}
+const handle = (req: Request) => caspianHandleApi(req, { stripe: Stripe });
+export const GET = handle;
+export const POST = handle;
 `);
+
+// ---- One-click updates: redeploy Firebase on every package bump ----
+// The /admin/about Update button commits the package bump; this workflow
+// deploys the new release's rules, indexes and functions from that commit.
+// It skips itself until the FIREBASE_SERVICE_ACCOUNT secret is added.
+write('.github/workflows/caspian-firebase-deploy.yml', readFileSync(join(packageRoot, 'scaffold', 'caspian-firebase-deploy.yml'), 'utf8'));
 
 // ---- Firebase config ----
 // Copy the real rule files from the package's own firebase/ tree, so the user
@@ -1052,7 +1068,7 @@ npm run dev                  # http://localhost:3000
    npm run deploy:stripe
    \`\`\`
 
-   Then go to \`/admin/plugins/payments\`, click **Browse providers → Install** on the Stripe card, paste your publishable (\`pk_...\`) key, save, and click **Enable**. The publishable key lives in Firestore under \`paymentPluginInstalls\`; only server-side secrets live in Cloud Functions secrets.
+   Then go to \`/admin/plugins\` and switch on **Stripe** — it opens Stripe's settings page, where you paste your publishable (\`pk_...\`) key and click **Save** (or go straight to \`/admin/plugins/stripe\`). The publishable key lives in Firestore under \`paymentPluginInstalls\`; only server-side secrets live in Cloud Functions secrets.
 
    If you also scaffolded with \`--with-email\`, deploy the email codebase. The provider API key is a **Cloud Functions secret**, not a Firestore field — set both secrets before the first deploy (the deploy fails fast if a referenced secret is missing; leave the one you don't use empty):
    \`\`\`bash
@@ -1062,7 +1078,7 @@ npm run dev                  # http://localhost:3000
    npm run deploy:email
    \`\`\`
 
-   Then go to \`/admin/plugins/email-providers\`, click **Browse providers → Install** on SendGrid or Brevo, save, and click **Enable** — the install only records which provider is active; the key stays in Secret Manager. Order-lifecycle and contact-form emails will start firing the next time a shopper triggers one. Configure sender identity + templates at \`/admin/settings/emails\`.
+   Then go to \`/admin/plugins\` and switch on **SendGrid** or **Brevo** — it opens the provider's settings page; click **Save** there. That only records which provider is active; the key stays in Secret Manager. Order-lifecycle and contact-form emails will start firing the next time a shopper triggers one. Configure sender identity + templates at \`/admin/settings/emails\`.
 
    If you also scaffolded with \`--with-instagram\`, deploy the Instagram codebase — it lets store staff view the feed, moderate comments, **publish a product as a post**, and **delete posts** (the Meta app secret + token stay server-side). Set the Meta app credentials first, then deploy:
    \`\`\`bash
@@ -1129,9 +1145,8 @@ npm run dev                  # http://localhost:3000
 - \`/admin/appearance\` — theme catalog grid (preview + activate)
 - \`/admin-preview/appearance\` — dummy-data preview window (outside \`/admin\` so it escapes the admin shell)
 - \`/admin/settings/general\` — brand / logo / favicon / social / privacy
-- \`/admin/plugins/shipping\` — install / configure shipping providers
-- \`/admin/plugins/payments\` — install / configure payment providers (Stripe, …)
-- \`/admin/plugins/email-providers\` — install / configure email providers (SendGrid, Brevo)
+- \`/admin/plugins\` — switch shipping, payment and email plugins on or off
+- \`/admin/plugins/<plugin>\` — one plugin's settings (e.g. \`/admin/plugins/flat-rate\`, \`/admin/plugins/stripe\`, \`/admin/plugins/sendgrid\`)
 - \`/admin/settings/emails\` — edit transactional email templates
 - \`/admin/settings/languages\` — enable / disable locales
 - \`/admin/about\` — library info + error-log triage surface

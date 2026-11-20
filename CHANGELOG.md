@@ -16,6 +16,192 @@ Do not omit the heading, rename it, or fold it into `### Notes`. This is how
 customers tell at a glance whether an upgrade needs attention.
 -->
 
+## v15.4.0 — Embedded mode, digital products, base path, payment plugin registry
+
+The store can now run inside another app: the host's Firebase project, sign-in,
+admin console and design stay in charge, and the store keeps its data apart.
+Stores can also sell downloadable products.
+
+### Added
+
+- **Embedded mode** (`embedded` prop): reuses the host's Firebase app and signed-in user; store admin is the `storeAdmin` custom claim (`setStoreAdminClaim` in `./server`, `STORE_ADMIN_CLAIM`); collections and Storage paths are prefixed (`collectionPrefix`, default `store_`); no config script, error capture, theme injector or font loader; `embedded.css` scopes page-wide rules to `.caspian-store`. `caspianHandleApi` takes `embedded` and `collectionPrefix`, and refuses setup, self-update and role routes when embedded.
+- **Embedded rules:** `firebase/embedded/build-embedded-rules.mjs` writes prefixed rules blocks into a host's rules files, with admin from the claim only and an optional `--auth` condition. Covered by `firebase/embedded-rules.test.mjs`.
+- **`basePath`** prop: mount the store under a sub-path such as `/store`; links, navigation and default Stripe return URLs follow it.
+- **Digital products:** product type, private file uploads, download limit; checkout without an address for download-only carts; the Stripe webhook records `downloads` on the order; `getDownloadUrl` returns 10-minute signed links and counts downloads in `orderDownloads`; `<OrderDownloads>`, an account Downloads page (`/account/downloads`) and downloads on the admin order page.
+- **`registerPaymentPlugin`** / `listPaymentPlugins`: add payment providers beyond the built-ins.
+- Firebase 13 accepted as a peer dependency.
+
+### Security
+
+- Clients can no longer create orders that carry `downloads`; `orderDownloads` and the `downloads/` Storage folder are closed to non-admins.
+
+### Consumer action required on upgrade
+
+Only for stores that want digital products; nothing changes for existing stores otherwise.
+
+1. Redeploy the rules: `npm run firebase:sync`, then `firebase deploy --only firestore:rules,storage`.
+2. Redeploy the admin functions for `getDownloadUrl`: `firebase deploy --only functions:caspian-admin,functions:caspian-stripe`.
+3. Give the functions' service account the *Service Account Token Creator* role on itself so download links can be signed.
+
+## v15.3.0 — Product editor checks and colour editor, order details page, related products, locale-prefixed URLs
+
+The second round of the hadiyyam gap analysis: features the hadiyyam shop had
+that the library lacked, carried into the library so every store gets them.
+
+### Added
+
+- **Product editor**
+  - Every field is checked, with the error under the field; saving waits until
+    they are fixed. The rules live in the exported `validateProductDraft`.
+  - A Color variants section adds, orders and removes `colorVariants`
+    (a name plus an uploaded or pasted image).
+  - An optional Step-by-step layout: Basic info → Details → Review. Full form
+    stays the default.
+- **Import / export:** new products column `colorVariants`, written as
+  `name|url;name|url`.
+- **Order details page:** `/orders/:id` now shows `<OrderDetailPage>`. It has a
+  status timeline (`<OrderStatusTimeline>`), the items with colour and size,
+  the totals with the promo code, the delivery address, the notes and the
+  payment method. Until now the route reused the order confirmation page,
+  which polls for a webhook-written order and has none of these.
+- **Checkout**
+  - An optional order-notes box, saved to `shippingInfo.orderNotes`.
+  - Each shipping rate shows the dates it arrives on (`formatDeliveryWindow`).
+- **Product page**
+  - "You may also like" (`<RelatedProducts>`, same category) at the bottom of
+    all three layouts. Controlled by `hideRelated`, `relatedLimit` and
+    `getProductHref`.
+  - Swipeable gallery with previous/next buttons.
+- **Collection pages**
+  - A slug with no curated collection falls back to the product category with
+    that slug.
+  - A sort control: featured, price up, price down, newest.
+- **Locale in the URL:** new `CaspianStoreProvider` prop `localeInUrl`, which
+  keeps the page's locale segment (`/fr/…`) on the library's links and
+  navigation. The Stripe success and cancel URLs that `CaspianRoot` infers now
+  keep it too. New helpers `getLocalePrefix` and `withLocalePrefix`.
+- Order statuses are translated on the shopper pages (`order.status.*`).
+- **Plugins, reworked.** There is now one Plugins page with a card per plugin.
+  - Each card has an **Enable** switch and a **Settings** link, which opens
+    that plugin's own page (`/admin/plugins/<pluginId>`) instead of a dialog.
+  - Plugins that need details first (Stripe, bank transfer, email
+    providers) open their settings page when switched on.
+  - The separate `/admin/plugins/manage/*` pages now redirect to the list,
+    and the category page exports are wrappers around it.
+  - New export: `AdminPluginSettingsPage`.
+- **Storefront polish:**
+  - The Shop and Collections pages sit in the same centred container as the
+    header.
+  - The large gap above every page is gone.
+  - The cart drawer floats with a margin and rounded corners.
+- **Server mode — no Firebase CLI, no Cloud Functions.**
+  - New `caspianHandleApi` (`./server` entry) for one route,
+    `app/api/caspian-store/[...path]/route.ts`, plus a new
+    `<CaspianStoreProvider serverApi>` prop.
+  - With both in place, the checkout, admin-role, guest-order and Stripe
+    webhook calls run on the host's server.
+  - The admin installs the Firestore rules, Storage rules and indexes from a
+    banner (`<AdminSetupBanner>`). On a fresh store, **Claim admin** installs
+    them and promotes the first account.
+  - Uses the host's own Google credentials: automatic on App Hosting,
+    `FIREBASE_SERVICE_ACCOUNT` elsewhere.
+  - The Cloud Functions sources are bundled into this entry behind a
+    `firebase-functions` shim, so both modes share one implementation.
+  - New exports: `caspianCallable`, `callCaspianServer`,
+    `CaspianCallableError`, `useCaspianServerApi`, `AdminSetupBanner`;
+    server-side `caspianHandleApi`, `getFirebaseSetupStatus`,
+    `installFirebaseSetup`. See INSTALL.md §3.5.
+- **The About page and the Update button see tagged versions.** They used to
+  read only GitHub Releases, so a version that was tagged but never released
+  (v13–v15) was invisible and the page reported v12 as the latest. They now
+  merge in `vX.Y.Z` tags as well.
+- **One-click updates cover Firebase too:**
+  - A new GitHub Actions workflow template,
+    `scaffold/caspian-firebase-deploy.yml`, which the scaffolder writes to
+    `.github/workflows/`. It runs on every push that bumps the package (such
+    as the commit from the Update button on `/admin/about`) and deploys that
+    release's rules, indexes, Storage rules and Cloud Functions.
+  - A new script, `firebase/scripts/sync-functions.mjs`, run with
+    `npm run firebase:sync-functions`. It refreshes the site's `functions-*`
+    copies from the installed package, so upgrades no longer deploy stale
+    functions.
+
+### Fixed
+
+- **Storefront header and footer came back.** `<LayoutShell>` passed
+  `header ?? null` to the chrome, so a `<CaspianRoot />` mounted without
+  `header` / `footer` props rendered neither. Now only an explicit `null`
+  hides them.
+- **Settings → General no longer crashes on migrated stores.** A
+  `settings/site` doc whose `socialLinks` was saved as a `{ platform: url }`
+  map (older hadiyyam) made the page throw; `getSiteSettings` now normalizes
+  the doc (map → list, null/number text fields → strings). The storefront
+  footer had the same latent crash.
+- **The setup banner shows the real problem.** A setup-status reply that
+  carried an `error` string was read as a failed request ("Server request
+  failed (200)"); the server's message is shown instead.
+- **Admin pages work under a locale prefix.** `AdminRoot`, the admin
+  sidebar's active state and the Settings / Taxonomies sub-navs matched
+  `/admin/...` against the raw pathname, so `/en/admin/products` always
+  showed the dashboard. They strip the locale segment now, and `localeInUrl`
+  hands the library an unprefixed `pathname`.
+
+### Changed
+
+- **Product editor validation:** a filled stock cell must be a whole number of
+  0 or more. Before, other values were quietly rounded. A blank cell still
+  means untracked. Image URLs must be `http(s)` or root-relative.
+
+### No consumer action required
+
+Library-only changes. No rules, indexes or Cloud Functions changed; upgrade
+the package and everything is picked up. `localeInUrl` is opt-in. To make
+future updates one click end to end, add the new deploy workflow and its
+`FIREBASE_SERVICE_ACCOUNT` secret (INSTALL.md, "Self-update from
+`/admin/about`").
+
+## v15.2.0 — Stripe charges the tax it shows, the success page finds the order, and colour variants are buyable
+
+Three storefront defects found while comparing the library with the hadiyyam
+shop it was extracted from. hadiyyam handled each of these; the library did not.
+
+### Fixed
+
+- **Stripe checkout now charges tax.** The checkout page showed a tax row and a
+  total that included it, but `createStripeCheckoutSession` never added it and
+  the webhook never wrote `Order.tax`, so every Stripe order under-collected by
+  the tax shown. The callable now recomputes tax server-side from
+  `settings/site` (`taxMode`, `flatTaxRate`, `supportedCountries[].taxRate`,
+  `taxConfig.taxBasedOn`) with the same rule as the checkout page, adds it as a
+  "Tax" line item, and the webhook stores it on the order and in `total`.
+- **The Stripe success page shows the order.** `/orders/success?session_id=cs_…`
+  looked the order up by the session id, but the webhook keys orders by
+  `H{timestamp}`, so the page always fell through to "still processing". It now
+  resolves a Stripe session id with an owner-scoped query on
+  `payment.stripeSessionId` (new `getOrderByStripeSession`), and still reads
+  manual-payment orders by document id.
+- **Colour variants can be chosen on the product page.** `Product.colorVariants`
+  was stored and counted in the admin list but never shown to shoppers, so a
+  colour never reached the cart. All three product-detail layouts now render a
+  `<ColorSelector>` (image swatches), lead the gallery with the chosen colour's
+  image, require a colour before adding to cart, and pass it as `selectedColor`.
+
+### Added
+
+- `ColorSelector` / `ColorSelectorProps`, `getOrderByStripeSession`,
+  `isStripeSessionId` exports.
+- i18n keys `product.color`, `product.selectColor`.
+
+### Consumer action required on upgrade
+
+Redeploy the Stripe Functions so card payments charge tax. Stores with no tax
+configured (`taxMode` unset or `none`) see no change in what they charge.
+
+```bash
+npm install github:CaspianTools/script-caspian-store#v15.2.0 firebase
+firebase deploy --only functions:caspian-stripe
+```
+
 ## v15.1.0 — Full review: the bugs a shop would have hit, and a storefront that feels finished
 
 A top-to-bottom review of the library — storefront, cart and checkout, admin

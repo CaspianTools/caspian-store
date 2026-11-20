@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 export interface GetGuestOrderRequest {
   orderId: string;
@@ -68,7 +69,7 @@ export const getGuestOrder = onCall({ cors: true }, async (request) => {
 
   try {
     const db = getFirestore();
-    const docSnap = await db.collection('orders').doc(trimmedId).get();
+    const docSnap = await db.collection(storeCol('orders')).doc(trimmedId).get();
 
     // Single 404 path for both missing and email-mismatch so callers can't
     // probe which order ids exist for an arbitrary email.

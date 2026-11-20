@@ -1,15 +1,18 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
-import type { FirebaseOptions } from 'firebase/app';
-import { initCaspianFirebase, type CaspianFirebase } from '../firebase/client';
+import type { FirebaseApp, FirebaseOptions } from 'firebase/app';
+import { caspianFirebaseFromApp, initCaspianFirebase, type CaspianFirebase } from '../firebase/client';
 import { caspianCollections, type CaspianCollections } from '../firebase/collections';
+import { registerStorePrefix } from '../firebase/store-paths';
 import { readFirebaseConfigFromEnv } from '../firebase/env-config';
 import {
   DefaultCaspianLink,
   DefaultCaspianImage,
   useDefaultCaspianNavigation,
   type FrameworkAdapters,
+  type CaspianLinkProps,
+  type CaspianNavigation,
 } from '../primitives';
 import { AuthProvider } from '../context/auth-context';
 import { CartProvider } from '../context/cart-context';
@@ -24,8 +27,52 @@ import type { MessageDict } from '../i18n/messages';
 import { DEFAULT_SCRIPT_SETTINGS, type ScriptSettings } from '../types';
 import { ErrorBoundary } from '../components/error-boundary';
 import { logError } from '../services/error-log-service';
+import { getLocalePrefix, stripLocalePrefix, withLocalePrefix } from '../utils/strip-locale-prefix';
+import { normalizeBasePath, stripBasePath, withBasePath } from '../utils/base-path';
+import { registerCaspianServerApi } from '../services/caspian-callable';
+
+/**
+ * Embedded mode: the store lives inside a host app that already has its own
+ * Firebase project, sign-in, admin console and design. Added in v15.4.0.
+ *
+ * What changes when it is set:
+ * - The store reuses `firebaseApp` (and so the host's signed-in user) instead
+ *   of initialising its own app; `firebaseConfig` and `appName` are ignored.
+ * - Store admin is the `storeAdmin: true` custom claim on the user's ID token,
+ *   granted by the host (see `setStoreAdminClaim` in the `./server` entry). The
+ *   `role` field on the store's user profile no longer makes anyone admin, and
+ *   the first-user / claim-admin bootstrap is not offered.
+ * - Every collection and Storage path the store owns is prefixed
+ *   (`collectionPrefix`, default `store_`).
+ * - App-wide side effects are off: no Firebase config `<script>`, no global
+ *   error capture, no theme variables or web fonts written onto the document.
+ *   Import `embedded.css` instead of `styles.css`; the store renders inside a
+ *   `.caspian-store` element and takes its look from the `--caspian-*`
+ *   variables the host sets there (map them to the host's design tokens).
+ */
+export interface CaspianEmbedOptions {
+  /** The host's initialised Firebase app (usually its `[DEFAULT]` app). */
+  firebaseApp: FirebaseApp;
+  /** Cloud Functions region for the store's callables. Default `us-central1`. */
+  functionsRegion?: string;
+  /**
+   * Prefix for every top-level Firestore collection and Storage path the
+   * store owns, so its data never mixes with the host's. Default `store_`
+   * (`store_products`, `store_orders`, `store_users`, …). Set the same value
+   * as `collectionPrefix` on `caspianHandleApi` / `CASPIAN_COLLECTION_PREFIX`
+   * for Cloud Functions, and generate the rules with the same prefix.
+   */
+  collectionPrefix?: string;
+}
+
+export const DEFAULT_EMBED_COLLECTION_PREFIX = 'store_';
+
+/** The custom claim that makes a user a store admin in embedded mode. */
+export const STORE_ADMIN_CLAIM = 'storeAdmin';
 
 export interface CaspianStoreProviderProps {
+  /** Run inside a host app. See {@link CaspianEmbedOptions}. */
+  embedded?: CaspianEmbedOptions;
   /**
    * Firebase project config (apiKey, authDomain, projectId, etc.).
    *
@@ -61,6 +108,33 @@ export interface CaspianStoreProviderProps {
    * for Next.js, or `react-router-dom`'s Link + a useNavigate wrapper.
    */
   adapters?: Partial<FrameworkAdapters>;
+  /**
+   * Set when the host app puts the locale in the URL (`/fr/cart`, e.g. a
+   * next-intl `[locale]` segment) and its Link / router adapters do NOT add it
+   * themselves. The library then prefixes every root-relative href it renders
+   * or navigates to with the current page's locale segment, so `/cart` from
+   * `/fr/product/x` goes to `/fr/cart` instead of bouncing through a
+   * middleware redirect that may pick a different language. Leave it off when
+   * the adapters are already locale-aware (next-intl's own `Link` /
+   * `useRouter`), or links get prefixed twice. Added in v15.3.0.
+   */
+  localeInUrl?: boolean;
+  /**
+   * Sub-path the store is mounted under in the host app, e.g. `/store`. Every
+   * library link and navigation gains it, the pathname the store routes on
+   * loses it, and the default Stripe return URLs include it. Combine with
+   * `localeInUrl` for `/fr/store/cart`. Default: the site root. v15.4.0.
+   */
+  basePath?: string;
+  /**
+   * URL of the host's server API (`caspianHandleApi` from the `./server`
+   * entry), usually `/api/caspian-store`. When set, the Cloud Functions
+   * callables (checkout, admin roles, guest-order lookup, …) run there
+   * instead, and the admin can install the store's security rules and
+   * indexes with one button — nothing to deploy with the Firebase CLI.
+   * Added in v15.3.0.
+   */
+  serverApi?: string;
   /** Optional Firebase app name when mounting more than one store per page. */
   appName?: string;
   /** Locale code (BCP-47). Default: `en`. Does not change the messages dict on its own — pair with `messages` or `messagesByLocale`. */
@@ -82,6 +156,12 @@ export interface CaspianStoreContextValue {
   collections: CaspianCollections | null;
   adapters: FrameworkAdapters;
   standalone: boolean;
+  /** `serverApi` prop, or null when the store runs on Cloud Functions. */
+  serverApi: string | null;
+  /** True when mounted with the `embedded` prop. */
+  embedded: boolean;
+  /** Normalised `basePath` prop (`/store`), or `''` at the site root. */
+  basePath: string;
 }
 
 const CaspianStoreContext = createContext<CaspianStoreContextValue | null>(null);
@@ -121,11 +201,15 @@ function resolveFirebaseConfig(passed: FirebaseOptions): FirebaseOptions {
 }
 
 export function CaspianStoreProvider({
+  embedded,
   firebaseConfig,
   standalone = false,
   scriptSettings,
   functionsRegion,
   adapters,
+  localeInUrl = false,
+  basePath: basePathProp,
+  serverApi,
   appName,
   locale,
   messages,
@@ -133,13 +217,43 @@ export function CaspianStoreProvider({
   children,
 }: CaspianStoreProviderProps) {
   const value = useMemo<CaspianStoreContextValue>(() => {
-    const resolvedAdapters: FrameworkAdapters = {
+    const baseAdapters: FrameworkAdapters = {
       Link: adapters?.Link ?? DefaultCaspianLink,
       Image: adapters?.Image ?? DefaultCaspianImage,
       useNavigation: adapters?.useNavigation ?? useDefaultCaspianNavigation,
     };
+    const basePath = normalizeBasePath(basePathProp);
+    // Base path outermost: `/cart` → `/store/cart` → (locale) `/fr/store/cart`.
+    const localeAdapters = localeInUrl ? withLocaleInUrl(baseAdapters) : baseAdapters;
+    const resolvedAdapters = basePath ? withBasePathAdapters(localeAdapters, basePath) : localeAdapters;
     if (standalone) {
-      return { firebase: null, collections: null, adapters: resolvedAdapters, standalone: true };
+      return {
+        firebase: null,
+        collections: null,
+        adapters: resolvedAdapters,
+        standalone: true,
+        serverApi: null,
+        embedded: false,
+        basePath,
+      };
+    }
+    if (embedded) {
+      const firebase = caspianFirebaseFromApp(embedded.firebaseApp, embedded.functionsRegion);
+      registerStorePrefix(
+        firebase.db,
+        firebase.storage,
+        embedded.collectionPrefix ?? DEFAULT_EMBED_COLLECTION_PREFIX,
+      );
+      registerCaspianServerApi(firebase.app.name, serverApi);
+      return {
+        firebase,
+        collections: caspianCollections(firebase.db),
+        adapters: resolvedAdapters,
+        standalone: false,
+        serverApi: serverApi ?? null,
+        embedded: true,
+        basePath,
+      };
     }
     const resolvedConfig = resolveFirebaseConfig(firebaseConfig ?? {});
     const firebase = initCaspianFirebase({
@@ -148,7 +262,16 @@ export function CaspianStoreProvider({
       name: appName,
     });
     const collections = caspianCollections(firebase.db);
-    return { firebase, collections, adapters: resolvedAdapters, standalone: false };
+    registerCaspianServerApi(firebase.app.name, serverApi);
+    return {
+      firebase,
+      collections,
+      adapters: resolvedAdapters,
+      standalone: false,
+      serverApi: serverApi ?? null,
+      embedded: false,
+      basePath,
+    };
     // Intentionally stable per mount; consumers should not swap these at runtime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -179,7 +302,8 @@ export function CaspianStoreProvider({
   // passes a partial config. The script runs at HTML parse time, before
   // React hydration, so the client useMemo above can read it via
   // readSsrConfigFromWindow().
-  const ssrConfigJson = value.firebase ? JSON.stringify(value.firebase.app.options) : null;
+  // The host owns its config in embedded mode.
+  const ssrConfigJson = value.firebase && !value.embedded ? JSON.stringify(value.firebase.app.options) : null;
 
   return (
     <CaspianStoreContext.Provider value={value}>
@@ -192,18 +316,21 @@ export function CaspianStoreProvider({
         />
       )}
       <ErrorBoundary db={value.firebase?.db} origin="CaspianStoreProvider">
-        <GlobalErrorCapture db={value.firebase?.db ?? null} projectId={firebaseConfig?.projectId} />
+        {!value.embedded && (
+          <GlobalErrorCapture db={value.firebase?.db ?? null} projectId={firebaseConfig?.projectId} />
+        )}
         <LocationChangeBridge />
         <LocaleProvider locale={locale} messages={messages} messagesByLocale={messagesByLocale}>
           <ToastProvider>
-            <AuthProvider firebase={value.firebase}>
+            <AuthProvider firebase={value.firebase} embedded={value.embedded}>
               <CartProvider db={value.firebase?.db ?? null}>
                 <WishlistProvider db={value.firebase?.db ?? null}>
                   <ScriptSettingsProvider collections={value.collections} seed={settingsSeed}>
                     <TemplateProvider>
-                      <ThemeInjector />
-                      <FontLoader />
-                      {children}
+                      {!value.embedded && <ThemeInjector />}
+                      {!value.embedded && <FontLoader />}
+                      {/* Embedded: the scope for embedded.css and the host's --caspian-* mapping. */}
+                      {value.embedded ? <div className="caspian-store">{children}</div> : children}
                     </TemplateProvider>
                   </ScriptSettingsProvider>
                 </WishlistProvider>
@@ -323,6 +450,62 @@ export function useCaspianStore(): CaspianStoreContextValue {
     );
   }
   return ctx;
+}
+
+/**
+ * Wraps the Link and navigation adapters so root-relative hrefs carry the
+ * current page's locale segment. Built once per provider mount (the adapters
+ * are stable per mount), so the wrapper component identities never change.
+ */
+function withLocaleInUrl(base: FrameworkAdapters): FrameworkAdapters {
+  const BaseLink = base.Link;
+  const useBaseNavigation = base.useNavigation;
+  function LocaleLink(props: CaspianLinkProps) {
+    const prefix = getLocalePrefix(useBaseNavigation().pathname);
+    return <BaseLink {...props} href={withLocalePrefix(props.href, prefix)} />;
+  }
+  function useLocaleNavigation(): CaspianNavigation {
+    const nav = useBaseNavigation();
+    const prefix = getLocalePrefix(nav.pathname);
+    return {
+      ...nav,
+      // Every library router matches unprefixed paths (`/admin/products`);
+      // the prefix only matters on the way out, which push/replace re-add.
+      pathname: stripLocalePrefix(nav.pathname) || '/',
+      push: (href: string) => nav.push(withLocalePrefix(href, prefix)),
+      replace: (href: string) => nav.replace(withLocalePrefix(href, prefix)),
+    };
+  }
+  return { ...base, Link: LocaleLink, useNavigation: useLocaleNavigation };
+}
+
+/** Same idea as `withLocaleInUrl`, for the `basePath` prop. */
+function withBasePathAdapters(base: FrameworkAdapters, basePath: string): FrameworkAdapters {
+  const BaseLink = base.Link;
+  const useBaseNavigation = base.useNavigation;
+  function BasePathLink(props: CaspianLinkProps) {
+    return <BaseLink {...props} href={withBasePath(props.href, basePath)} />;
+  }
+  function useBasePathNavigation(): CaspianNavigation {
+    const nav = useBaseNavigation();
+    return {
+      ...nav,
+      pathname: stripBasePath(nav.pathname, basePath),
+      push: (href: string) => nav.push(withBasePath(href, basePath)),
+      replace: (href: string) => nav.replace(withBasePath(href, basePath)),
+    };
+  }
+  return { ...base, Link: BasePathLink, useNavigation: useBasePathNavigation };
+}
+
+/** The `basePath` the store is mounted under (`/store`), or `''`. */
+export function useCaspianBasePath(): string {
+  return useCaspianStore().basePath;
+}
+
+/** The host's server API URL (`serverApi` prop), or null. */
+export function useCaspianServerApi(): string | null {
+  return useCaspianStore().serverApi;
 }
 
 /** Convenience hooks for framework adapters. */

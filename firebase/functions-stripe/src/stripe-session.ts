@@ -3,6 +3,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { getFirestore } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 const STRIPE_SECRET = defineSecret('STRIPE_SECRET_KEY');
 
@@ -50,7 +51,7 @@ export const getStripeSession = onCall(
 
     const db = getFirestore();
     const snap = await db
-      .collection('orders')
+      .collection(storeCol('orders'))
       .where('payment.stripeSessionId', '==', sessionId)
       .limit(1)
       .get();

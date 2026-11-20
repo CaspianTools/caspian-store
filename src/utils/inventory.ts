@@ -26,10 +26,11 @@ export function totalStock(product: Pick<Product, 'stock'>): number {
  * considered "unknown" — see `totalStock`.
  */
 export function isProductOutOfStock(
-  product: Pick<Product, 'stock' | 'sizes'>,
+  product: Pick<Product, 'stock' | 'sizes' | 'kind'>,
   settings: Pick<InventorySettings, 'outOfStockThreshold'> = DEFAULT_INVENTORY_SETTINGS,
 ): boolean {
-  if (!product.stock) return false;
+  // Digital products ignore stock (v15.4.0).
+  if (product.kind === 'digital' || !product.stock) return false;
   const entries = Object.entries(product.stock);
   if (entries.length === 0) return true;
   return entries.every(([, qty]) => (Number(qty) || 0) <= settings.outOfStockThreshold);
@@ -53,10 +54,10 @@ export function isSizeOutOfStock(
 export type StockBadgeKind = 'out-of-stock' | 'low-stock' | 'in-stock';
 
 export function resolveStockBadge(
-  product: Pick<Product, 'stock' | 'sizes'>,
+  product: Pick<Product, 'stock' | 'sizes' | 'kind'>,
   settings: InventorySettings = DEFAULT_INVENTORY_SETTINGS,
 ): StockBadgeKind | null {
-  if (!settings.trackStock) return null;
+  if (!settings.trackStock || product.kind === 'digital') return null;
   if (settings.stockDisplay === 'never') return null;
   if (!product.stock) return null;
   const total = totalStock(product);

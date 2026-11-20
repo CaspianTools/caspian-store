@@ -1259,3 +1259,45 @@ test('posLicenses: a signed-out visitor is denied', async () => {
   await env.clearFirestore();
   await assertFails(getDoc(doc(unauthed(), 'posLicenses', 'lic1')));
 });
+
+// ---- digital products (v15.4.0) ---------------------------------------------
+
+test('orders/{id}: create rejected when it carries download entitlements', async () => {
+  await env.clearFirestore();
+  const db = authed('alice');
+  await assertFails(
+    addDoc(collection(db, 'orders'), {
+      ...VALID_MANUAL_ORDER('alice'),
+      downloads: [{ productId: 'p1', fileId: 'f1', name: 'x.zip', size: 1, downloadLimit: 0 }],
+    }),
+  );
+});
+
+test('orderDownloads/{orderId}: buyer can neither read nor reset their counts', async () => {
+  await env.clearFirestore();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'orderDownloads', 'o1'), { userId: 'alice', counts: { f1: 3 } });
+  });
+  const db = authed('alice');
+  await assertFails(getDoc(doc(db, 'orderDownloads', 'o1')));
+  await assertFails(setDoc(doc(db, 'orderDownloads', 'o1'), { userId: 'alice', counts: {} }));
+});
+
+test('storage downloads/**: signed-in non-admin cannot read a product file', async () => {
+  await env.clearStorage();
+  await env.withSecurityRulesDisabled(async (ctx) => {
+    await uploadBytes(storageRef(ctx.storage(), 'downloads/p1/f1'), PNG_1x1, { contentType: 'application/zip' });
+  });
+  await assertFails(getDownloadURL(storageRef(authedStorage('alice'), 'downloads/p1/f1')));
+  await assertFails(getDownloadURL(storageRef(unauthedStorage(), 'downloads/p1/f1')));
+});
+
+test('storage downloads/**: non-admin upload denied, admin upload allowed', async () => {
+  await env.clearStorage();
+  await assertFails(
+    uploadBytes(storageRef(authedStorage('alice'), 'downloads/p1/f1'), PNG_1x1, { contentType: 'application/zip' }),
+  );
+  await assertSucceeds(
+    uploadBytes(storageRef(adminClaimStorage('admin1'), 'downloads/p1/f1'), PNG_1x1, { contentType: 'application/zip' }),
+  );
+});

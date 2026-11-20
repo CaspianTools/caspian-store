@@ -5,17 +5,22 @@ export {
   useCaspianLink,
   useCaspianImage,
   useCaspianNavigation,
+  useCaspianServerApi,
   useCaspianCollections,
   useCaspianCollectionsOptional,
   useCaspianFirebase,
   useCaspianFirebaseOptional,
   useCaspianStandalone,
+  useCaspianBasePath,
+  STORE_ADMIN_CLAIM,
+  type CaspianEmbedOptions,
   type CaspianStoreProviderProps,
   type CaspianStoreContextValue,
 } from './provider/caspian-store-provider';
 
 // --- Hooks / contexts ---
 export { useAuth } from './context/auth-context';
+export { normalizeBasePath, stripBasePath, withBasePath } from './utils/base-path';
 export { useCart } from './context/cart-context';
 export { useScriptSettings } from './context/script-settings-context';
 
@@ -70,11 +75,14 @@ export {
 } from './components/collection-detail-page';
 export { SearchResultsPage, type SearchResultsPageProps } from './components/search-results-page';
 export { SearchDialog, type SearchDialogProps } from './components/search-dialog';
-export { ProductGallery } from './components/product-gallery';
+export { ProductGallery, type ProductGalleryProps } from './components/product-gallery';
+export { RelatedProducts, type RelatedProductsProps } from './components/related-products';
 export {
   SizeSelector,
+  ColorSelector,
   QuantitySelector,
   type SizeSelectorProps,
+  type ColorSelectorProps,
 } from './components/product-selectors';
 export { ProductDetailPage, type ProductDetailPageProps } from './components/product-detail-page';
 export { CartSheet, type CartSheetProps } from './components/cart-sheet';
@@ -92,6 +100,32 @@ export {
   OrderHistoryList,
   type OrderHistoryListProps,
 } from './components/order-history-list';
+export { OrderDetailPage, type OrderDetailPageProps } from './components/order-detail-page';
+export {
+  OrderDownloads,
+  orderHasDeliverableDownloads,
+  type OrderDownloadsProps,
+} from './components/order-downloads';
+export {
+  AccountDownloadsPage,
+  type AccountDownloadsPageProps,
+} from './components/account-downloads-page';
+export {
+  DigitalDownloadBadge,
+  type DigitalDownloadBadgeProps,
+} from './components/digital-download-badge';
+export { getDownloadLink, type DownloadLink } from './services/download-service';
+export {
+  isDigitalProduct,
+  DIGITAL_DOWNLOAD_SHIPPING_METHOD,
+  type ProductFile,
+  type ProductKind,
+  type OrderDownload,
+} from './types';
+export {
+  OrderStatusTimeline,
+  type OrderStatusTimelineProps,
+} from './components/order-status-timeline';
 export { WishlistButton, type WishlistButtonProps } from './components/wishlist-button';
 export {
   QuickAddToCartButton,
@@ -149,7 +183,7 @@ export {
   type WebManifestInput,
   type WebManifestIcon,
 } from './pwa/build-manifest';
-export { stripLocalePrefix } from './utils/strip-locale-prefix';
+export { stripLocalePrefix, getLocalePrefix, withLocalePrefix } from './utils/strip-locale-prefix';
 
 // Homepage surface (v1.2). `<Hero>` is the dispatcher; the per-variant
 // implementations live under `./components/home/variants/` and are
@@ -523,6 +557,8 @@ export {
 export {
   hasUserPurchasedProduct,
   getOrderById,
+  getOrderByStripeSession,
+  isStripeSessionId,
   getOrdersByUser,
   listAllOrders,
   updateOrderStatus,
@@ -566,6 +602,8 @@ export {
   PAYMENT_PLUGIN_IDS,
   PAYMENT_PLUGIN_CATALOG,
   getPaymentPlugin,
+  listPaymentPlugins,
+  registerPaymentPlugin,
   STRIPE_PLUGIN,
   BACS_PLUGIN,
   CHEQUE_PLUGIN,
@@ -802,9 +840,11 @@ export {
   type FreeOverThresholdConfig,
   type WeightBasedConfig,
 } from './shipping';
-export { ShippingRatePicker, type ShippingRatePickerProps } from './components/checkout';
+export { ShippingRatePicker, formatDeliveryWindow, type ShippingRatePickerProps } from './components/checkout';
 export {
   uploadAdminImage,
+  uploadAdminFile,
+  MAX_ADMIN_FILE_BYTES,
   deleteStorageObject,
   diagnoseUploadDenial,
   tryEnsureAdminClaim,
@@ -815,6 +855,7 @@ export { tryLinkGuestOrders } from './services/guest-order-link-service';
 // --- Admin surface ---
 export {
   AdminGuard,
+  AdminSetupBanner,
   AdminShell,
   AdminSettingsShell,
   AdminTaxonomiesShell,
@@ -823,6 +864,7 @@ export {
   AdminRoot,
   AdminPluginsPage,
   AdminPluginInstallPage,
+  AdminPluginSettingsPage,
   AdminShippingOptionsPage,
   useEnabledPluginInstalls,
   DEFAULT_ADMIN_NAV,
@@ -872,6 +914,7 @@ export {
   type AdminTaxonomiesShellProps,
   type AdminPluginsPageProps,
   type AdminPluginInstallPageProps,
+  type AdminPluginSettingsPageProps,
   type AdminShippingOptionsPageProps,
   type AdminShippingPluginsPageProps,
   type AdminPaymentPluginsPageProps,
@@ -1063,6 +1106,15 @@ export { redactError, redactString } from './utils/redact-error';
 export type { ErrorLog, ErrorLogSource } from './types';
 
 // --- Utilities ---
+export {
+  validateProductDraft,
+  isValidImageUrl,
+  PRODUCT_NAME_MIN_LENGTH,
+  PRODUCT_DESCRIPTION_MIN_LENGTH,
+  type ProductDraft,
+  type ProductDraftErrors,
+  type ProductValidationOptions,
+} from './admin/product-validation';
 export { cn } from './utils/cn';
 export { slugify } from './utils/slugify';
 export {
@@ -1117,3 +1169,8 @@ export {
   type UseAdminNotificationsOptions,
   type UseAdminNotificationsResult,
 } from './hooks/use-admin-notifications';
+export {
+  caspianCallable,
+  callCaspianServer,
+  CaspianCallableError,
+} from './services/caspian-callable';

@@ -1,4 +1,10 @@
-import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
+import {
+  getDoc,
+  setDoc,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { CartItemRef, FirestoreCart } from '../types';
 
 export async function loadUserCart(db: Firestore, uid: string): Promise<CartItemRef[]> {

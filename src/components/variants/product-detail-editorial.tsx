@@ -5,8 +5,10 @@ import { Button } from '../../ui/button';
 import { HtmlContent } from '../../ui/html-content';
 import { Badge, Skeleton } from '../../ui/misc';
 import { ProductGallery } from '../product-gallery';
-import { QuantitySelector, SizeSelector } from '../product-selectors';
+import { ColorSelector, QuantitySelector, SizeSelector } from '../product-selectors';
+import { DigitalDownloadBadge } from '../digital-download-badge';
 import { ProductReviews } from '../reviews/product-reviews';
+import { RelatedProducts } from '../related-products';
 import type { ProductDetailPageProps } from '../product-detail-page';
 import { useProductDetailState } from './use-product-detail-state';
 import { useScriptSettings } from '../../context/script-settings-context';
@@ -24,7 +26,14 @@ import { cn } from '../../utils/cn';
  * still converts but the storytelling is the lead.
  */
 export function ProductDetailEditorial(props: ProductDetailPageProps) {
-  const { formatPrice: formatPriceProp, hideReviews, className } = props;
+  const {
+    formatPrice: formatPriceProp,
+    hideReviews,
+    hideRelated,
+    relatedLimit,
+    getProductHref,
+    className,
+  } = props;
   const { settings } = useScriptSettings();
   const currency = useFormatCurrency(settings.defaultCurrency);
   const formatPrice = formatPriceProp ?? ((p: number) => currency.format(p));
@@ -35,6 +44,9 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
     brandName,
     blurb,
     selectedSize,
+    selectedColor,
+    setSelectedColor,
+    galleryImages,
     setSelectedSize,
     sizeSelectorRef,
     quantity,
@@ -46,6 +58,8 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
     handleAddToCart,
     handleStickyAddToCart,
     stickyHint,
+    inventory,
+    taxConfig,
     derived,
     t,
   } = state;
@@ -75,7 +89,7 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
       style={{ maxWidth: 1100, margin: '0 auto', padding: '40px 24px 0' }}
     >
       <div className="caspian-pdp-editorial-gallery" style={{ maxWidth: 720, margin: '0 auto' }}>
-        <ProductGallery images={product.images} />
+        <ProductGallery key={selectedColor ?? ''} images={galleryImages} />
       </div>
 
       <div
@@ -169,6 +183,20 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
         )}
 
         <div style={purchaseRow}>
+          {derived.hasColors && (
+            <div>
+              <p style={selectorLabel}>
+                {t('product.color')}
+                {selectedColor ? `: ${selectedColor}` : ''}
+              </p>
+              <ColorSelector
+                variants={product.colorVariants!}
+                value={selectedColor}
+                onChange={setSelectedColor}
+              />
+            </div>
+          )}
+
           {derived.hasSizes && (
             <div ref={sizeSelectorRef} tabIndex={-1} style={{ outline: 'none' }}>
               <p style={selectorLabel}>{t('product.size')}</p>
@@ -180,10 +208,16 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
               />
             </div>
           )}
-          <div>
-            <p style={selectorLabel}>{t('product.quantity')}</p>
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-          </div>
+          {derived.isDigital ? (
+            <div>
+              <DigitalDownloadBadge />
+            </div>
+          ) : (
+            <div>
+              <p style={selectorLabel}>{t('product.quantity')}</p>
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+            </div>
+          )}
         </div>
 
         <Button size="lg" onClick={handleAddToCart}>
@@ -283,6 +317,19 @@ export function ProductDetailEditorial(props: ProductDetailPageProps) {
             }}
           />
         </section>
+      )}
+
+      {!hideRelated && (
+        <RelatedProducts
+          product={product}
+          limit={relatedLimit}
+          getProductHref={getProductHref}
+          formatPrice={formatPrice}
+          inventory={inventory}
+          taxConfig={taxConfig}
+          style={{ marginTop: 72, paddingTop: 36, borderTop: '1px solid rgba(124, 93, 63, 0.18)' }}
+          headingStyle={{ textAlign: 'center', fontWeight: 400, fontStyle: 'italic', color: 'var(--caspian-primary, #7c5d3f)' }}
+        />
       )}
     </div>
   );

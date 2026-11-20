@@ -72,7 +72,7 @@ export function LayoutShell({
   const alreadyMounted = useContext(LayoutShellMountedContext);
   const { db } = useCaspianFirebase();
   const nav = useCaspianNavigation();
-  const { userProfile } = useAuth();
+  const { isAdmin } = useAuth();
   const pathname = pathnameOverride ?? nav.pathname;
   const stripped = stripLocalePrefix(pathname);
   // Segment-aware: `/admin` must not also claim `/administration`.
@@ -108,7 +108,7 @@ export function LayoutShell({
   if (bypass) return <>{children}</>;
 
   const allowAdminPreview = settings?.comingSoon?.allowAdminPreview !== false;
-  const isAdminPreview = allowAdminPreview && userProfile?.role === 'admin';
+  const isAdminPreview = allowAdminPreview && isAdmin;
 
   if (
     settings?.comingSoon?.enabled &&
@@ -120,7 +120,14 @@ export function LayoutShell({
 
   return (
     <LayoutShellMountedContext.Provider value={true}>
-      <ChromeComponent header={header ?? null} footer={footer ?? null} contentPaddingY={contentPaddingY}>
+      {/* `undefined` means "the default header/footer"; only an explicit
+          `null` hides them. Collapsing both to null (`header ?? null`) hid
+          the chrome on every <CaspianRoot /> mounted without these props. */}
+      <ChromeComponent
+        header={header === null ? null : (header ?? {})}
+        footer={footer === null ? null : (footer ?? {})}
+        contentPaddingY={contentPaddingY}
+      >
         {children}
       </ChromeComponent>
     </LayoutShellMountedContext.Provider>

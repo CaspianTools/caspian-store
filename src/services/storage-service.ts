@@ -1,13 +1,21 @@
+import { caspianCallable } from './caspian-callable';
 import {
   deleteObject,
   getDownloadURL,
   ref,
   uploadBytes,
+  uploadBytesResumable,
   type FirebaseStorage,
 } from 'firebase/storage';
-import { doc, getDoc, updateDoc, Timestamp, type Firestore } from 'firebase/firestore';
+import {
+  getDoc,
+  updateDoc,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc, storeStoragePath } from '../firebase/store-paths';
 import { updateProfile, type Auth } from 'firebase/auth';
-import { httpsCallable, type Functions } from 'firebase/functions';
+import type { Functions } from 'firebase/functions';
 
 const PROFILE_PHOTO_PATH = (uid: string, ext: string) => `users/${uid}/avatar.${ext}`;
 const LEGACY_PROFILE_PHOTO_PATHS = ['jpg', 'jpeg', 'png', 'webp'];
@@ -45,7 +53,7 @@ export async function uploadProfilePhoto({
 
   const ext = extFromType(file.type);
   const path = PROFILE_PHOTO_PATH(uid, ext);
-  const storageRef = ref(storage, path);
+  const storageRef = ref(storage, storeStoragePath(storage, path));
   await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
 
@@ -107,7 +115,7 @@ export async function uploadAdminImage({
   if (file.size > maxBytes) {
     throw new Error(`Image must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
   }
-  const storageRef = ref(storage, path);
+  const storageRef = ref(storage, storeStoragePath(storage, path));
   try {
     await uploadBytes(storageRef, file, { contentType: file.type });
   } catch (err) {
@@ -128,6 +136,67 @@ export async function uploadAdminImage({
     }
   }
   return await getDownloadURL(storageRef);
+}
+
+export const MAX_ADMIN_FILE_BYTES = 500 * 1024 * 1024;
+
+/**
+ * Upload a file of any content type for an admin surface (digital product
+ * downloads under `downloads/{productId}/{fileId}`, v15.4.0). Same
+ * unauthorized-retry self-heal as {@link uploadAdminImage}, but resumable so
+ * large files report progress. Returns no URL: download objects are private
+ * and buyers get signed links from the `getDownloadUrl` callable.
+ */
+export async function uploadAdminFile({
+  storage,
+  path,
+  file,
+  auth,
+  functions,
+  maxBytes = MAX_ADMIN_FILE_BYTES,
+  onProgress,
+}: {
+  storage: FirebaseStorage;
+  path: string;
+  file: File;
+  auth?: Auth;
+  functions?: Functions;
+  maxBytes?: number;
+  /** Fraction uploaded, 0 to 1. */
+  onProgress?: (fraction: number) => void;
+}): Promise<{ size: number; contentType: string }> {
+  if (file.size > maxBytes) {
+    throw new Error(`File must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
+  }
+  const contentType = file.type || 'application/octet-stream';
+  const storageRef = ref(storage, storeStoragePath(storage, path));
+  const run = () =>
+    new Promise<void>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, file, { contentType });
+      task.on(
+        'state_changed',
+        (snap) => {
+          if (snap.totalBytes > 0) onProgress?.(snap.bytesTransferred / snap.totalBytes);
+        },
+        reject,
+        () => resolve(),
+      );
+    });
+  try {
+    await run();
+  } catch (err) {
+    if (isUnauthorized(err) && auth?.currentUser) {
+      if (functions) {
+        await tryEnsureAdminClaim({ functions, auth });
+      } else {
+        await auth.currentUser.getIdToken(true);
+      }
+      await run();
+    } else {
+      throw err;
+    }
+  }
+  return { size: file.size, contentType };
 }
 
 /**
@@ -154,7 +223,7 @@ export async function tryEnsureAdminClaim({
 }): Promise<boolean> {
   if (!auth.currentUser) return false;
   try {
-    const callable = httpsCallable<unknown, EnsureAdminClaimResult>(
+    const callable = caspianCallable<unknown, EnsureAdminClaimResult>(
       functions,
       'ensureAdminClaim',
     );
@@ -258,7 +327,7 @@ export async function deleteStorageObject(
   path: string,
 ): Promise<void> {
   try {
-    await deleteObject(ref(storage, path));
+    await deleteObject(ref(storage, storeStoragePath(storage, path)));
   } catch {
     /* ignore missing objects */
   }
@@ -277,7 +346,7 @@ export async function removeProfilePhoto({
   // Best-effort cleanup of any of the allowed extensions.
   for (const ext of LEGACY_PROFILE_PHOTO_PATHS) {
     try {
-      await deleteObject(ref(storage, PROFILE_PHOTO_PATH(uid, ext)));
+      await deleteObject(ref(storage, storeStoragePath(storage, PROFILE_PHOTO_PATH(uid, ext))));
     } catch {
       /* ignore missing objects */
     }

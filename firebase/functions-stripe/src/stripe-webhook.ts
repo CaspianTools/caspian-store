@@ -4,6 +4,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
 import { reportFunctionError } from './error-report';
 import type { CheckoutShippingInfo, PendingCheckout, PendingOrderItem } from './stripe-checkout';
+import { storeCol } from './store-names';
 
 const STRIPE_SECRET = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
@@ -53,7 +54,7 @@ export const stripeWebhook = onRequest(
 
     const session = event.data.object as Stripe.Checkout.Session;
     const db = getFirestore();
-    const eventRef = db.collection('stripeEvents').doc(event.id);
+    const eventRef = db.collection(storeCol('stripeEvents')).doc(event.id);
 
     try {
       // --- Duplicate detection (cheap pre-checks; the transaction is authoritative) ---
@@ -63,7 +64,7 @@ export const stripeWebhook = onRequest(
         return;
       }
       const existing = await db
-        .collection('orders')
+        .collection(storeCol('orders'))
         .where('payment.stripeSessionId', '==', session.id)
         .limit(1)
         .get();
@@ -86,12 +87,14 @@ export const stripeWebhook = onRequest(
       let promoCode: string | null = null;
       let discount = 0;
       let shippingCost = 0;
+      let downloads: PendingCheckout['downloads'] = undefined;
+      let tax = 0;
       let userEmail = '';
       let isGuest = false;
       let pendingRef: FirebaseFirestore.DocumentReference | null = null;
 
       if (metadata.pendingCheckoutId) {
-        pendingRef = db.collection('pendingCheckouts').doc(metadata.pendingCheckoutId);
+        pendingRef = db.collection(storeCol('pendingCheckouts')).doc(metadata.pendingCheckoutId);
         const pendingSnap = await pendingRef.get();
         if (!pendingSnap.exists) {
           console.error(
@@ -109,8 +112,10 @@ export const stripeWebhook = onRequest(
         promoCode = pending.promoCode ?? null;
         discount = pending.discount ?? 0;
         shippingCost = pending.shippingCost ?? 0;
+        tax = pending.tax ?? 0;
         userEmail = pending.userEmail ?? '';
         isGuest = pending.isGuest === true;
+        downloads = pending.downloads;
       } else {
         // Legacy sessions (created before v15.1) carry the cart in metadata.
         // Tag each parse so Cloud Logs + the error-logs collection show
@@ -156,7 +161,7 @@ export const stripeWebhook = onRequest(
       // `userEmail` matches the (lowercased) Auth record email.
       userEmail = (userEmail || session.customer_details?.email || '').trim().toLowerCase();
       const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const total = Math.max(0, subtotal + shippingCost - discount);
+      const total = Math.max(0, subtotal + shippingCost + tax - discount);
 
       // --- Enrich payment from Stripe (outside the transaction: it may retry) ---
       const paymentIntent = session.payment_intent
@@ -168,10 +173,10 @@ export const stripeWebhook = onRequest(
       const cardDetails = charge?.payment_method_details?.card;
 
       const orderId = `H${Date.now()}`;
-      const orderRef = db.collection('orders').doc(orderId);
-      const cartRef = db.collection('carts').doc(userId);
+      const orderRef = db.collection(storeCol('orders')).doc(orderId);
+      const cartRef = db.collection(storeCol('carts')).doc(userId);
       const productRefs = [...new Set(items.map((i) => i.productId))].map((id) =>
-        db.collection('products').doc(id),
+        db.collection(storeCol('products')).doc(id),
       );
 
       const outcome = await db.runTransaction(async (tx) => {
@@ -205,6 +210,7 @@ export const stripeWebhook = onRequest(
             selectedSize: item.selectedSize ?? null,
             selectedColor: item.selectedColor ?? null,
             imageUrl: item.imageUrl ?? '',
+            ...(item.digital ? { digital: true } : {}),
           })),
           shippingInfo: shippingInfo ?? {},
           payment: {
@@ -215,22 +221,25 @@ export const stripeWebhook = onRequest(
           },
           subtotal,
           shippingCost,
+          ...(tax > 0 ? { tax } : {}),
           discount,
           promoCode,
           total,
           ...(isGuest ? { isGuest: true } : {}),
+          ...(downloads && downloads.length > 0 ? { downloads } : {}),
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
 
         // --- Decrement per-size stock (deleted products are skipped, not fatal) ---
         for (const item of items) {
+          if (item.digital) continue; // downloads have no stock
           if (!existingProducts.has(item.productId)) {
             console.warn(`[caspian-webhook] Product ${item.productId} gone; stock not decremented.`);
             continue;
           }
           const stockField = item.selectedSize ? `stock.${item.selectedSize}` : 'stock._default';
-          tx.update(db.collection('products').doc(item.productId), {
+          tx.update(db.collection(storeCol('products')).doc(item.productId), {
             [stockField]: FieldValue.increment(-item.quantity),
             updatedAt: FieldValue.serverTimestamp(),
           });

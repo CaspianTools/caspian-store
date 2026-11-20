@@ -1,7 +1,6 @@
 import {
   addDoc,
   deleteDoc,
-  doc,
   getDocs,
   increment,
   limit,
@@ -13,6 +12,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { ErrorLog, ErrorLogSource } from '../types';
 import { CASPIAN_STORE_VERSION } from '../version';

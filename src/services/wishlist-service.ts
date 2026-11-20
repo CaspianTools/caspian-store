@@ -1,12 +1,12 @@
 import {
   arrayRemove,
   arrayUnion,
-  doc,
   getDoc,
   setDoc,
   updateDoc,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 
 export async function addToWishlist(db: Firestore, uid: string, productId: string) {
   await updateDoc(doc(db, 'users', uid), { wishlist: arrayUnion(productId) });

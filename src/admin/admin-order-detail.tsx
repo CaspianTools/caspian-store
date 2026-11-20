@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { Order, OrderStatus } from '../types';
+import { DIGITAL_DOWNLOAD_SHIPPING_METHOD, type Order, type OrderStatus } from '../types';
+import { formatBytes } from '../utils/format-bytes';
 import { getOrderById, updateOrderStatus } from '../services/order-service';
 import { useCaspianFirebase, useCaspianLink } from '../provider/caspian-store-provider';
 import { useT } from '../i18n/locale-context';
@@ -89,6 +90,11 @@ export function AdminOrderDetail({
 
   const placed = order.createdAt?.toDate ? order.createdAt.toDate() : null;
   const orderNotes = order.shippingInfo?.orderNotes?.trim();
+  // A download-only order ships nothing, so the address block would be blank.
+  const shipsNothing =
+    order.shippingInfo?.shippingMethod === DIGITAL_DOWNLOAD_SHIPPING_METHOD ||
+    (order.items.length > 0 && order.items.every((i) => i.digital));
+  const downloads = order.downloads ?? [];
 
   return (
     <div className={className}>
@@ -127,6 +133,7 @@ export function AdminOrderDetail({
               <p style={{ margin: 0, fontWeight: 500 }}>{item.name}</p>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: '#888' }}>
                 {item.selectedSize && `Size ${item.selectedSize} · `}Qty {item.quantity} · {formatPrice(item.price)}
+                {item.digital && ` · ${t('product.digital.label')}`}
               </p>
             </div>
             <span style={{ fontWeight: 600 }}>{formatPrice(item.price * item.quantity)}</span>
@@ -157,7 +164,43 @@ export function AdminOrderDetail({
         {order.promoCode && <SummaryRow label="Promo code" value={order.promoCode} />}
       </section>
 
-      {order.shippingInfo && (
+      {downloads.length > 0 && (
+        <section style={sectionStyle}>
+          <h2 style={h2Style}>{t('downloads.title')}</h2>
+          {downloads.map((d) => (
+            <SummaryRow
+              key={`${d.productId}:${d.fileId}`}
+              label={d.name}
+              value={`${formatBytes(d.size)} · ${
+                d.downloadLimit > 0
+                  ? t('downloads.limit', { count: d.downloadLimit })
+                  : t('admin.products.digital.unlimited')
+              }`}
+            />
+          ))}
+        </section>
+      )}
+
+      {order.shippingInfo && shipsNothing && (
+        <section style={sectionStyle}>
+          <h2 style={h2Style}>{t('admin.orders.digital.customer')}</h2>
+          <p style={{ margin: 0, fontSize: 14 }}>{order.shippingInfo.name || '—'}</p>
+          {order.shippingInfo.phone && (
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#666' }}>{order.shippingInfo.phone}</p>
+          )}
+          <p style={{ margin: '8px 0 0', fontSize: 13, color: '#666' }}>
+            {t('admin.orders.digital.noShipping')}
+          </p>
+          {orderNotes && (
+            <p style={{ margin: '8px 0 0', fontSize: 13, whiteSpace: 'pre-wrap' }}>
+              <span style={{ color: '#666' }}>Order notes: </span>
+              {orderNotes}
+            </p>
+          )}
+        </section>
+      )}
+
+      {order.shippingInfo && !shipsNothing && (
         <section style={sectionStyle}>
           <h2 style={h2Style}>Shipping</h2>
           <p style={{ margin: 0, fontSize: 14 }}>

@@ -13,7 +13,7 @@ export {
   type ChequeConfig,
   type CodConfig,
 } from './types';
-export { PAYMENT_PLUGIN_CATALOG, getPaymentPlugin } from './catalog';
+export { PAYMENT_PLUGIN_CATALOG, getPaymentPlugin, listPaymentPlugins, registerPaymentPlugin } from './catalog';
 export { STRIPE_PLUGIN } from './plugins/stripe';
 export { BACS_PLUGIN } from './plugins/bacs';
 export { CHEQUE_PLUGIN } from './plugins/cheque';

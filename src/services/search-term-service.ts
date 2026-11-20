@@ -1,6 +1,5 @@
 import {
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   increment,
@@ -13,6 +12,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { SearchTerm } from '../types';
 

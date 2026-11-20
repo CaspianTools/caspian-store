@@ -22,6 +22,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { send } from './email-sender';
 import { EMAIL_SECRETS } from './secrets';
 import { renderEmail, type EmailSettingsFields, type RenderContext } from './email-renderer';
+import { storeCol } from './store-names';
 
 type AdminTemplateKey = 'new_order_admin' | 'cancelled_order_admin' | 'failed_order_admin';
 type CustomerTemplateKey =
@@ -79,7 +80,7 @@ function adminTemplateForStatus(status: string | undefined): AdminTemplateKey | 
 }
 
 export const runEmailOnOrderCreate = onDocumentCreated(
-  { document: 'orders/{id}', secrets: EMAIL_SECRETS },
+  { document: storeCol('orders') + '/{id}', secrets: EMAIL_SECRETS },
   async (event) => {
     const snap = event.data;
     if (!snap) return;
@@ -100,7 +101,7 @@ export const runEmailOnOrderCreate = onDocumentCreated(
 );
 
 export const runEmailOnOrderUpdate = onDocumentUpdated(
-  { document: 'orders/{id}', secrets: EMAIL_SECRETS },
+  { document: storeCol('orders') + '/{id}', secrets: EMAIL_SECRETS },
   async (event) => {
     const before = event.data?.before.data() as OrderDoc | undefined;
     const after = event.data?.after.data() as OrderDoc | undefined;
@@ -128,8 +129,8 @@ async function sendForOrder(
 
   const db = getFirestore();
   const [settingsSnap, siteSnap] = await Promise.all([
-    db.collection('emailSettings').doc('site').get(),
-    db.collection('settings').doc('site').get(),
+    db.collection(storeCol('emailSettings')).doc('site').get(),
+    db.collection(storeCol('settings')).doc('site').get(),
   ]);
 
   if (!settingsSnap.exists) {
@@ -204,7 +205,7 @@ async function loadTemplate(
   db: FirebaseFirestore.Firestore,
   key: TemplateKey,
 ): Promise<LoadedTemplate | null> {
-  const snap = await db.collection('emailTemplates').doc(key).get();
+  const snap = await db.collection(storeCol('emailTemplates')).doc(key).get();
   if (!snap.exists) {
     logger.debug(`[email] Template "${key}" not configured; skipping.`);
     return null;

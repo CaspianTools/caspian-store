@@ -5,8 +5,10 @@ import { Button } from '../../ui/button';
 import { HtmlContent } from '../../ui/html-content';
 import { Badge, Separator, Skeleton } from '../../ui/misc';
 import { ProductGallery } from '../product-gallery';
-import { QuantitySelector, SizeSelector } from '../product-selectors';
+import { ColorSelector, QuantitySelector, SizeSelector } from '../product-selectors';
+import { DigitalDownloadBadge } from '../digital-download-badge';
 import { ProductReviews } from '../reviews/product-reviews';
+import { RelatedProducts } from '../related-products';
 import type { ProductDetailPageProps } from '../product-detail-page';
 import { useProductDetailState } from './use-product-detail-state';
 import { useTaxonomyTermsByType } from '../../hooks/use-taxonomy-terms';
@@ -26,7 +28,14 @@ import { cn } from '../../utils/cn';
  * `useTemplateComponent('ProductDetailPage', ProductDetailDefault)`.
  */
 export function ProductDetailDefault(props: ProductDetailPageProps) {
-  const { formatPrice: formatPriceProp, hideReviews, className } = props;
+  const {
+    formatPrice: formatPriceProp,
+    hideReviews,
+    hideRelated,
+    relatedLimit,
+    getProductHref,
+    className,
+  } = props;
   const { settings } = useScriptSettings();
   const currency = useFormatCurrency(settings.defaultCurrency);
   const formatPrice = formatPriceProp ?? ((p: number) => currency.format(p));
@@ -37,6 +46,9 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
     brandName,
     blurb,
     selectedSize,
+    selectedColor,
+    setSelectedColor,
+    galleryImages,
     setSelectedSize,
     sizeSelectorRef,
     quantity,
@@ -50,6 +62,8 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
     handleAddToCart,
     handleStickyAddToCart,
     stickyHint,
+    inventory,
+    taxConfig,
     derived,
     t,
   } = state;
@@ -97,7 +111,7 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
       style={{ maxWidth: 1200, margin: '0 auto', padding: '40px 24px 0' }}
     >
       <div className="caspian-pdp-grid" style={gridStyle}>
-        <ProductGallery images={product.images} />
+        <ProductGallery key={selectedColor ?? ''} images={galleryImages} />
         <div className="caspian-pdp-default-info" style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {product.isNew && <Badge variant="secondary">{t('storefront.badges.new')}</Badge>}
@@ -133,6 +147,20 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
               }}
             >
               {t('storefront.stock.outOfStock')}
+            </div>
+          )}
+
+          {derived.hasColors && (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>
+                {t('product.color')}
+                {selectedColor ? `: ${selectedColor}` : ''}
+              </p>
+              <ColorSelector
+                variants={product.colorVariants!}
+                value={selectedColor}
+                onChange={setSelectedColor}
+              />
             </div>
           )}
 
@@ -186,10 +214,16 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
             </div>
           )}
 
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-          </div>
+          {derived.isDigital ? (
+            <div style={{ marginBottom: 16 }}>
+              <DigitalDownloadBadge />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+            </div>
+          )}
 
           <Button size="lg" onClick={handleAddToCart}>
             {t('product.addToCart')}
@@ -275,6 +309,17 @@ export function ProductDetailDefault(props: ProductDetailPageProps) {
             <ProductReviews productId={product.id} mode="questions-only" />
           )}
         </div>
+      )}
+
+      {!hideRelated && (
+        <RelatedProducts
+          product={product}
+          limit={relatedLimit}
+          getProductHref={getProductHref}
+          formatPrice={formatPrice}
+          inventory={inventory}
+          taxConfig={taxConfig}
+        />
       )}
     </div>
   );

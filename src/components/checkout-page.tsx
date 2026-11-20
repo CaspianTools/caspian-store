@@ -17,11 +17,14 @@ import { calculateShippingRates } from '../services/shipping-calculator';
 import { addAddress } from '../services/user-service';
 import { subscribeEmail } from '../services/subscriber-service';
 import { ALL_COUNTRIES } from '../utils/countries';
-import type { SiteSettings, SupportedCountry, UserAddress } from '../types';
+import {
+  DIGITAL_DOWNLOAD_SHIPPING_METHOD,
+  isDigitalProduct,
+  type SiteSettings, type SupportedCountry, type UserAddress } from '../types';
 import type { ShippingRate } from '../shipping/types';
 import { Button } from '../ui/button';
 import { ChevronDownIcon } from '../ui/icons';
-import { Input, Label } from '../ui/input';
+import { Input, Label, Textarea } from '../ui/input';
 import { Skeleton } from '../ui/misc';
 import { Select } from '../ui/select';
 import { useToast } from '../ui/toast';
@@ -52,6 +55,7 @@ interface ShippingForm {
   countryCode: string;
   postalCode: string;
   phone: string;
+  orderNotes: string;
   saveAddressToProfile: boolean;
   /**
    * "Create an account for faster checkout next time" — WooCommerce-style
@@ -64,6 +68,9 @@ interface ShippingForm {
 }
 
 const CHECKOUT_FORM_ID = 'caspian-checkout-form';
+
+// Same cap the hadiyyam checkout used; long enough for delivery instructions.
+const ORDER_NOTES_MAX = 500;
 
 // Countries whose postal codes are digits only, so the phone can show the
 // number pad. Anything else (GB, CA, NL, BR, JP, PL, ...) keeps the text
@@ -104,6 +111,7 @@ const emptyForm: ShippingForm = {
   countryCode: '',
   postalCode: '',
   phone: '',
+  orderNotes: '',
   saveAddressToProfile: true,
   createAccount: false,
 };
@@ -147,9 +155,12 @@ export function CheckoutPage({
   const currencyFormat = useFormatCurrency(currency);
   const formatPrice = formatPriceProp ?? ((n: number) => currencyFormat.format(n));
   const { items, subtotal, count } = useCart();
+  // A cart of downloads ships nothing: no address, no shipping method (v15.4.0).
+  const allDigital = items.length > 0 && items.every((i) => isDigitalProduct(i.product));
   const {
     user,
     userProfile,
+    isAdmin,
     loading: authLoading,
     signIn,
     signInAsGuest,
@@ -341,9 +352,10 @@ export function CheckoutPage({
 
   const showTaxRow = site?.taxMode === 'flat' || site?.taxMode === 'per-country';
   const taxLabel = site?.taxLabel || t('checkout.taxDefault');
+  const shippingCost = allDigital ? 0 : selectedRate?.price ?? 0;
   const total = useMemo(
-    () => subtotal + (selectedRate?.price ?? 0) + taxAmount,
-    [subtotal, selectedRate, taxAmount],
+    () => subtotal + shippingCost + taxAmount,
+    [subtotal, shippingCost, taxAmount],
   );
 
   // ---- Auto-anon-signin for guest checkout ----
@@ -442,9 +454,9 @@ export function CheckoutPage({
           {t('checkout.noPaymentConfigured.title')}
         </h1>
         <p style={{ color: '#666', marginTop: 8 }}>{t('checkout.noPaymentConfigured.body')}</p>
-        {userProfile?.role === 'admin' && (
+        {isAdmin && (
           <div style={{ marginTop: 16 }}>
-            <Link href="/admin/plugins/payments">{t('checkout.noPaymentConfigured.adminLink')}</Link>
+            <Link href="/admin/plugins?filter=payment">{t('checkout.noPaymentConfigured.adminLink')}</Link>
           </div>
         )}
       </div>
@@ -496,6 +508,7 @@ export function CheckoutPage({
     // is fresh post-account-promotion above.
     const effectiveUser = firebaseAuth.currentUser ?? user;
     if (
+      !allDigital &&
       selectedAddressId === 'new' &&
       form.saveAddressToProfile &&
       effectiveUser &&
@@ -520,11 +533,24 @@ export function CheckoutPage({
         successUrl,
         cancelUrl,
         promoCode,
-        shippingCost: selectedRate?.price ?? 0,
+        shippingCost,
         tax: taxAmount,
         email: form.email.trim(),
         createAccount: form.createAccount && !accountPromoted,
-        shippingInfo: selectedRate
+        // Order.shippingInfo is required and read across the order pages,
+        // so a download-only order still carries the buyer's name and contact.
+        shippingInfo: allDigital
+          ? {
+              name: `${form.firstName} ${form.lastName}`.trim(),
+              address: '',
+              city: '',
+              zip: '',
+              country: '',
+              shippingMethod: DIGITAL_DOWNLOAD_SHIPPING_METHOD,
+              phone: form.phone.trim() || undefined,
+              orderNotes: form.orderNotes.trim() || undefined,
+            }
+          : selectedRate
           ? {
               name: `${form.firstName} ${form.lastName}`.trim(),
               address: [form.address, form.apartment].filter(Boolean).join(' '),
@@ -533,6 +559,7 @@ export function CheckoutPage({
               country: form.countryCode,
               shippingMethod: selectedRate.label,
               phone: form.phone.trim() || undefined,
+              orderNotes: form.orderNotes.trim() || undefined,
             }
           : undefined,
       });
@@ -550,7 +577,9 @@ export function CheckoutPage({
   ];
   const hasSavedAddresses = (userProfile?.addresses?.length ?? 0) > 0;
 
-  const formValid = Boolean(
+  const formValid = allDigital
+    ? Boolean(form.email && form.firstName)
+    : Boolean(
     form.email &&
       form.firstName &&
       form.address &&
@@ -562,7 +591,7 @@ export function CheckoutPage({
   // ---- Render ----
 
   const postalIsNumeric = NUMERIC_POSTCODE_COUNTRIES.has(form.countryCode);
-  const submitDisabled = !selectedRate || !formValid;
+  const submitDisabled = (!allDigital && !selectedRate) || !formValid;
 
   const summaryBody = (
     <>
@@ -629,7 +658,9 @@ export function CheckoutPage({
         <SummaryRow
           label={t('checkout.shippingLine')}
           value={
-            selectedRate
+            allDigital
+              ? t('checkout.digital.noShipping')
+              : selectedRate
               ? selectedRate.price > 0
                 ? formatPrice(selectedRate.price)
                 : t('checkout.rate.free')
@@ -639,7 +670,7 @@ export function CheckoutPage({
         {showTaxRow && (
           <SummaryRow
             label={taxLabel}
-            value={form.countryCode ? formatPrice(taxAmount) : t('checkout.taxPending')}
+            value={form.countryCode || allDigital ? formatPrice(taxAmount) : t('checkout.taxPending')}
           />
         )}
         {promoCode && <SummaryRow label={t('checkout.promoLine')} value={promoCode} />}
@@ -680,7 +711,7 @@ export function CheckoutPage({
           letterSpacing: '-0.01em',
         }}
       >
-        {t('checkout.shippingInformation')}
+        {allDigital ? t('checkout.digital.title') : t('checkout.shippingInformation')}
       </h1>
 
       {/* Phones only (hidden >= 821px in globals.css): the summary comes
@@ -870,6 +901,65 @@ export function CheckoutPage({
             </div>
           </section>
 
+          {allDigital ? (
+            <section style={cardStyle}>
+              <h2 style={h2Style}>{t('checkout.digital.detailsTitle')}</h2>
+              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#666' }}>
+                {t('checkout.digital.detailsHint')}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="caspian-checkout-fields" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div>
+                    <FieldLabel htmlFor="caspian-checkout-first-name" required>
+                      {t('checkout.firstName')}
+                    </FieldLabel>
+                    <Input
+                      id="caspian-checkout-first-name"
+                      autoComplete="given-name"
+                      enterKeyHint="next"
+                      required
+                      value={form.firstName}
+                      onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel htmlFor="caspian-checkout-last-name">{t('checkout.lastName')}</FieldLabel>
+                    <Input
+                      id="caspian-checkout-last-name"
+                      autoComplete="family-name"
+                      enterKeyHint="next"
+                      value={form.lastName}
+                      onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <FieldLabel htmlFor="caspian-checkout-phone">{t('checkout.phone')}</FieldLabel>
+                  <Input
+                    id="caspian-checkout-phone"
+                    type="tel"
+                    autoComplete="tel"
+                    inputMode="tel"
+                    enterKeyHint="done"
+                    value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <FieldLabel htmlFor="caspian-checkout-notes">{t('checkout.orderNotes')}</FieldLabel>
+                  <Textarea
+                    id="caspian-checkout-notes"
+                    rows={3}
+                    maxLength={ORDER_NOTES_MAX}
+                    value={form.orderNotes}
+                    onChange={(e) => setForm((f) => ({ ...f, orderNotes: e.target.value }))}
+                  />
+                </div>
+                <p style={{ margin: 0, fontSize: 12, color: '#888' }}>{t('checkout.requiredHint')}</p>
+              </div>
+            </section>
+          ) : (
+          <>
           {/* --- Shipping Address --- */}
           <section style={cardStyle}>
             <h2 style={h2Style}>{t('checkout.shippingAddress')}</h2>
@@ -993,6 +1083,17 @@ export function CheckoutPage({
                     />
                   </div>
                 </div>
+                <div>
+                  <FieldLabel htmlFor="caspian-checkout-notes">{t('checkout.orderNotes')}</FieldLabel>
+                  <Textarea
+                    id="caspian-checkout-notes"
+                    rows={3}
+                    maxLength={ORDER_NOTES_MAX}
+                    placeholder={t('checkout.orderNotesPlaceholder')}
+                    value={form.orderNotes}
+                    onChange={(e) => setForm((f) => ({ ...f, orderNotes: e.target.value }))}
+                  />
+                </div>
                 <p style={{ margin: 0, fontSize: 12, color: '#888' }}>{t('checkout.requiredHint')}</p>
                 {user && !user.isAnonymous && (
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#666' }}>
@@ -1081,6 +1182,8 @@ export function CheckoutPage({
               </div>
             )}
           </section>
+          </>
+          )}
         </form>
 
         {/* --- Order Summary --- */}

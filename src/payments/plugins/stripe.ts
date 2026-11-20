@@ -1,5 +1,5 @@
+import { caspianCallable } from '../../services/caspian-callable';
 import { getIdToken } from 'firebase/auth';
-import { httpsCallable } from 'firebase/functions';
 import type {
   PaymentPlugin,
   PaymentPluginCheckoutCtx,
@@ -81,7 +81,7 @@ async function startCheckout(
     }
     data = (await response.json()) as StripeCallableResponse;
   } else {
-    const callable = httpsCallable<StripeCallablePayload, StripeCallableResponse>(
+    const callable = caspianCallable<StripeCallablePayload, StripeCallableResponse>(
       ctx.functions,
       'createStripeCheckoutSession',
     );
@@ -98,7 +98,7 @@ export const STRIPE_PLUGIN: PaymentPlugin<StripeConfig> = {
   id: 'stripe',
   name: 'Stripe',
   description:
-    'Accept card payments via Stripe Checkout. Requires the `functions-stripe` Cloud Functions codebase to be deployed. Keep test and live keys on one install and flip the mode — keep the Cloud Functions `STRIPE_SECRET_KEY` in sync.',
+    'Accept card payments via Stripe Checkout. The secret key (STRIPE_SECRET_KEY) is set on your website server, or in the Stripe Cloud Functions if you use them. Keep test and live keys on one install and flip the mode.',
   defaultConfig: {
     mode: 'test',
     publishableKeyLive: '',

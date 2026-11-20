@@ -1,6 +1,7 @@
 'use client';
 
 import type { ProductCardProps } from '../product-card';
+import { isDigitalProduct } from '../../types';
 import { useCaspianLink, useCaspianImage } from '../../provider/caspian-store-provider';
 import { useBrandName } from '../../hooks/use-brands';
 import { useFormatCurrency, useT } from '../../i18n/locale-context';
@@ -96,6 +97,7 @@ export function ProductCardCompact({
           <div style={{ position: 'absolute', top: 8, left: 8, display: 'flex', gap: 4 }}>
             {product.isNew && <Badge>{t('storefront.badges.new')}</Badge>}
             {product.limited && <Badge variant="destructive">{t('storefront.badges.limited')}</Badge>}
+            {isDigitalProduct(product) && <Badge variant="secondary">{t('product.digital.label')}</Badge>}
             {stockBadge === 'out-of-stock' && <Badge variant="destructive">{t('storefront.stock.outShort')}</Badge>}
           </div>
           {showWishlistIcon && (

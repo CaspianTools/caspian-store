@@ -1,4 +1,5 @@
 export { AdminGuard, type AdminGuardProps } from './admin-guard';
+export { AdminSetupBanner } from './admin-setup-banner';
 export {
   AdminShell,
   DEFAULT_ADMIN_NAV,
@@ -24,6 +25,10 @@ export {
   type AdminPluginInstallPageProps,
 } from './admin-plugin-install-page';
 export {
+  AdminPluginSettingsPage,
+  type AdminPluginSettingsPageProps,
+} from './admin-plugin-settings-page';
+export {
   AdminShippingOptionsPage,
   type AdminShippingOptionsPageProps,
 } from './admin-shipping-options-page';
@@ -41,6 +46,15 @@ export {
   AdminProductEditor,
   type AdminProductEditorProps,
 } from './admin-product-editor';
+export {
+  validateProductDraft,
+  isValidImageUrl,
+  PRODUCT_NAME_MIN_LENGTH,
+  PRODUCT_DESCRIPTION_MIN_LENGTH,
+  type ProductDraft,
+  type ProductDraftErrors,
+  type ProductValidationOptions,
+} from './product-validation';
 export { AdminOrdersList, type AdminOrdersListProps } from './admin-orders-list';
 export { AdminOrderDetail, type AdminOrderDetailProps } from './admin-order-detail';
 export { AdminReviewsModeration } from './admin-reviews-moderation';

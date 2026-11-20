@@ -21,6 +21,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { send } from './email-sender';
 import { EMAIL_SECRETS } from './secrets';
 import { renderEmail, type EmailSettingsFields, type RenderContext } from './email-renderer';
+import { storeCol } from './store-names';
 
 type ContactTemplateKey = 'new_contact_admin' | 'contact_autoreply';
 
@@ -42,7 +43,7 @@ interface LoadedTemplate {
 }
 
 export const runEmailOnContactCreate = onDocumentCreated(
-  { document: 'contacts/{id}', secrets: EMAIL_SECRETS },
+  { document: storeCol('contacts') + '/{id}', secrets: EMAIL_SECRETS },
   async (event) => {
     const snap = event.data;
     if (!snap) return;
@@ -51,8 +52,8 @@ export const runEmailOnContactCreate = onDocumentCreated(
 
     const db = getFirestore();
     const [settingsSnap, siteSnap] = await Promise.all([
-      db.collection('emailSettings').doc('site').get(),
-      db.collection('settings').doc('site').get(),
+      db.collection(storeCol('emailSettings')).doc('site').get(),
+      db.collection(storeCol('settings')).doc('site').get(),
     ]);
 
     if (!settingsSnap.exists) {
@@ -131,7 +132,7 @@ async function loadTemplate(
   db: FirebaseFirestore.Firestore,
   key: ContactTemplateKey,
 ): Promise<LoadedTemplate | null> {
-  const snap = await db.collection('emailTemplates').doc(key).get();
+  const snap = await db.collection(storeCol('emailTemplates')).doc(key).get();
   if (!snap.exists) {
     logger.debug(`[email] Template "${key}" not configured; skipping.`);
     return null;

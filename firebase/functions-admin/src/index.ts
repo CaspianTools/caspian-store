@@ -15,4 +15,5 @@ export { runRetentionCleanup } from './retention-cleanup';
 export { runScheduledPublish } from './scheduled-publish';
 export { linkGuestOrdersOnUserCreate, linkMyGuestOrders } from './link-guest-orders';
 export { getGuestOrder } from './get-guest-order';
+export { getDownloadUrl } from './get-download-url';
 export { stampVerifiedPurchase } from './stamp-verified-purchase';

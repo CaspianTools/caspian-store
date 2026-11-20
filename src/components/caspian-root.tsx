@@ -1,8 +1,12 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useCaspianNavigation, useCaspianStandalone } from '../provider/caspian-store-provider';
-import { stripLocalePrefix } from '../utils/strip-locale-prefix';
+import {
+  useCaspianBasePath,
+  useCaspianNavigation,
+  useCaspianStandalone,
+} from '../provider/caspian-store-provider';
+import { getLocalePrefix, stripLocalePrefix } from '../utils/strip-locale-prefix';
 
 import { HomePage } from './home';
 import { ProductDetailPage } from './product-detail-page';
@@ -13,6 +17,7 @@ import { SearchResultsPage } from './search-results-page';
 import { CartPage } from './cart-page';
 import { CheckoutPage } from './checkout-page';
 import { OrderConfirmationPage } from './order-confirmation-page';
+import { OrderDetailPage } from './order-detail-page';
 import { GuestOrderLookupPage } from './guest-order-lookup-page';
 
 import {
@@ -54,10 +59,11 @@ export interface CaspianRootProps {
   fallback?: (args: { pathname: string }) => ReactNode;
   /**
    * Where the payment provider redirects after a successful checkout.
-   * Default infers `${window.location.origin}/orders/success?session_id={CHECKOUT_SESSION_ID}`.
+   * Default infers `${window.location.origin}/orders/success?session_id={CHECKOUT_SESSION_ID}`,
+   * keeping a leading locale segment (`/fr/orders/success…`) when the page has one.
    */
   checkoutSuccessUrl?: string;
-  /** Where the payment provider redirects on cancel. Default `${origin}/checkout`. */
+  /** Where the payment provider redirects on cancel. Default `${origin}/checkout` (locale segment kept). */
   checkoutCancelUrl?: string;
   /** Where the setup wizard sends the admin after "Open my store". Default `/`. */
   setupFinishHref?: string;
@@ -92,6 +98,7 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   } = props;
 
   const nav = useCaspianNavigation();
+  const basePath = useCaspianBasePath();
   const { settings } = useScriptSettings();
   const t = useT();
   const path = stripLocalePrefix(nav.pathname) || '/';
@@ -159,7 +166,9 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
     <LayoutShell
       header={header}
       footer={footer}
-      contentPaddingY={path === '/' ? 0 : 100}
+      // Pages pad themselves inside their own containers; a 100px band above
+      // every page made the header look detached from the content.
+      contentPaddingY={path === '/' ? 0 : 8}
     >
       {renderStorefrontPage()}
     </LayoutShell>
@@ -174,8 +183,8 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   if (path === '/checkout') {
     return (
       <CheckoutPage
-        successUrl={checkoutSuccessUrl ?? inferCheckoutSuccessUrl()}
-        cancelUrl={checkoutCancelUrl ?? inferCheckoutCancelUrl()}
+        successUrl={checkoutSuccessUrl ?? inferCheckoutSuccessUrl(basePath)}
+        cancelUrl={checkoutCancelUrl ?? inferCheckoutCancelUrl(basePath)}
         currency={settings.defaultCurrency}
       />
     );
@@ -200,15 +209,27 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
     return sessionId ? <OrderConfirmationPage orderId={sessionId} /> : <NotFound path={path} />;
   }
   {
-    // Order history links here. The confirmation page is already a read-only
-    // order view keyed by document id, so it doubles as the detail page.
+    // Order history links here. Until v15.3 this reused the confirmation
+    // page, which polls for a webhook-written order; the detail page reads
+    // once and adds the status timeline, address and notes.
     const m = path.match(/^\/orders\/([^/]+)$/);
-    if (m) return <OrderConfirmationPage key={m[1]} orderId={m[1]} continueHref="/account?section=orders" />;
+    if (m) {
+      let orderId = m[1];
+      try {
+        orderId = decodeURIComponent(orderId);
+      } catch {
+        // A malformed escape is just an id that matches no order.
+      }
+      return <OrderDetailPage key={orderId} orderId={orderId} />;
+    }
   }
 
   if (path === '/order-status') return <GuestOrderLookupPage />;
 
   if (path === '/account') return <AccountPage />;
+  // Keyed so moving between /account and /account/downloads remounts the
+  // page with the right section instead of keeping the old one open.
+  if (path === '/account/downloads') return <AccountPage key="downloads" section="downloads" />;
   if (path === '/login' || path === '/auth/login') return <LoginPage />;
   if (path === '/register' || path === '/auth/register') return <RegisterPage />;
   if (path === '/forgot-password' || path === '/auth/forgot-password') return <ForgotPasswordPage />;
@@ -253,14 +274,21 @@ function toTitle(key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
-function inferCheckoutSuccessUrl(): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return `${origin}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
+// The payment provider redirects with a full URL, which no Link adapter ever
+// sees, so the locale segment the shopper is browsing under (`/fr/checkout`)
+// has to be carried over here or they come back in the default language.
+// The base path (`/store`) is added for the same reason.
+function currentOriginAndLocale(basePath: string): string {
+  if (typeof window === 'undefined') return '';
+  return `${window.location.origin}${getLocalePrefix(window.location.pathname)}${basePath}`;
 }
 
-function inferCheckoutCancelUrl(): string {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  return `${origin}/checkout`;
+function inferCheckoutSuccessUrl(basePath: string): string {
+  return `${currentOriginAndLocale(basePath)}/orders/success?session_id={CHECKOUT_SESSION_ID}`;
+}
+
+function inferCheckoutCancelUrl(basePath: string): string {
+  return `${currentOriginAndLocale(basePath)}/checkout`;
 }
 
 /**

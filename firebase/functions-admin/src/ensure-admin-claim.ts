@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { storeCol } from './store-names';
 
 /**
  * Idempotent self-heal callable: mirrors `users/{caller.uid}.role` to the
@@ -33,7 +34,7 @@ export const ensureAdminClaim = onCall({ cors: true }, async (request) => {
   }
   const uid = request.auth.uid;
   const db = getFirestore();
-  const userRef = db.collection('users').doc(uid);
+  const userRef = db.collection(storeCol('users')).doc(uid);
   const userSnap = await userRef.get();
   if (!userSnap.exists) {
     throw new HttpsError(

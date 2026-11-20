@@ -163,10 +163,9 @@ export function HomeEditorProvider({
   pageId?: string;
 }) {
   const { db } = useCaspianFirebase();
-  const { userProfile } = useAuth();
+  const { userProfile, isAdmin } = useAuth();
   const { toast } = useToast();
   const t = useT();
-  const isAdmin = userProfile?.role === 'admin';
 
   // Load the PUBLISHED layout (what shoppers see) and any saved DRAFT together.
   // `saved` is the published blocks; `draftBlocks` is the last-saved draft (null

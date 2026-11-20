@@ -7,6 +7,7 @@ import { useT } from '../../i18n/locale-context';
 import { Button } from '../../ui/button';
 import { Avatar } from '../../ui/misc';
 import { OrderHistoryList } from '../order-history-list';
+import { AccountDownloadsPage } from '../account-downloads-page';
 import { ProfileCard } from './profile-card';
 import { AddressBook } from './address-book';
 import { ChangePasswordCard } from './change-password-card';
@@ -29,6 +30,13 @@ export interface AccountPageProps {
   hidePhoto?: boolean;
   hideDeleteAccount?: boolean;
   hideWishlist?: boolean;
+  /** Hide the Downloads section (purchased digital files). */
+  hideDownloads?: boolean;
+  /**
+   * Pin the open section instead of reading `?section=`. `<CaspianRoot>`
+   * passes `'downloads'` for `/account/downloads` (v15.4.0).
+   */
+  section?: AccountSection;
   /** Base path for the account page. Default: `/account`. */
   basePath?: string;
   className?: string;
@@ -37,6 +45,7 @@ export interface AccountPageProps {
 const VALID_SECTIONS: AccountSection[] = [
   'profile',
   'orders',
+  'downloads',
   'addresses',
   'wishlist',
   'security',
@@ -61,6 +70,8 @@ export function AccountPage({
   hidePhoto,
   hideDeleteAccount,
   hideWishlist,
+  hideDownloads,
+  section,
   basePath = '/account',
   className,
 }: AccountPageProps) {
@@ -70,31 +81,39 @@ export function AccountPage({
   const t = useT();
 
   const [active, setActive] = useState<AccountSection>(() =>
-    resolveSection(nav.searchParams) !== 'profile'
+    section ??
+    (resolveSection(nav.searchParams) !== 'profile'
       ? resolveSection(nav.searchParams)
-      : readWindowSection(),
+      : readWindowSection()),
   );
 
   // Keep local state in sync with the URL for: (a) deep-links from the header
   // dropdown, (b) browser back/forward (popstate), (c) consumer adapters whose
   // `searchParams` IS reactive (nav.searchParams flips → we pick it up).
   useEffect(() => {
+    if (section) return;
     const fromNav = resolveSection(nav.searchParams);
     if (fromNav !== active) setActive(fromNav);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nav.searchParams]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || section) return;
     const onPop = () => setActive(readWindowSection());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  }, [section]);
 
   const handleSelect = useCallback(
     (next: AccountSection) => {
       setActive(next);
-      const href = next === 'profile' ? basePath : `${basePath}?section=${next}`;
+      // Downloads has its own route; the other sections are query-addressed.
+      const href =
+        next === 'profile'
+          ? basePath
+          : next === 'downloads'
+            ? `${basePath}/downloads`
+            : `${basePath}?section=${next}`;
       nav.push(href);
     },
     [nav, basePath],
@@ -127,6 +146,15 @@ export function AccountPage({
     { id: 'profile', label: t('account.menu.profile'), icon: ACCOUNT_SECTION_ICONS.profile },
     ...(!hideOrders
       ? [{ id: 'orders' as const, label: t('account.menu.orders'), icon: ACCOUNT_SECTION_ICONS.orders }]
+      : []),
+    ...(!hideDownloads
+      ? [
+          {
+            id: 'downloads' as const,
+            label: t('account.menu.downloads'),
+            icon: ACCOUNT_SECTION_ICONS.downloads,
+          },
+        ]
       : []),
     ...(!hideAddresses
       ? [
@@ -209,6 +237,12 @@ export function AccountPage({
             <section style={sectionStyle}>
               <h2 style={h2Style}>{t('account.sections.recentOrders')}</h2>
               <OrderHistoryList />
+            </section>
+          )}
+          {active === 'downloads' && !hideDownloads && (
+            <section style={sectionStyle}>
+              <h2 style={h2Style}>{t('account.sections.downloads')}</h2>
+              <AccountDownloadsPage />
             </section>
           )}
           {active === 'addresses' && !hideAddresses && <AddressBook />}

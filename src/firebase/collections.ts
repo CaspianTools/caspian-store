@@ -1,4 +1,7 @@
-import { collection, doc, type Firestore } from 'firebase/firestore';
+import {
+  type Firestore,
+} from 'firebase/firestore';
+import { collection, doc } from './store-paths';
 
 /**
  * Lazily build collection references against a consumer-provided Firestore instance.

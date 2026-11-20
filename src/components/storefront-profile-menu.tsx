@@ -38,7 +38,7 @@ export function StorefrontProfileMenu({
   avatarSize = 36,
   className,
 }: StorefrontProfileMenuProps) {
-  const { user, userProfile, loading, signOut } = useAuth();
+  const { user, userProfile, isAdmin, loading, signOut } = useAuth();
   const nav = useCaspianNavigation();
   const { toast } = useToast();
   const t = useT();
@@ -60,7 +60,6 @@ export function StorefrontProfileMenu({
   const photoURL = userProfile?.photoURL ?? user.photoURL ?? null;
   const fallback = (displayName || 'A').charAt(0);
   const email = user.email ?? '';
-  const isAdmin = userProfile?.role === 'admin';
 
   return (
     <DropdownMenu

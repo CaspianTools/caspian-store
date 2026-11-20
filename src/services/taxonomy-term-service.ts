@@ -1,6 +1,5 @@
 import {
   deleteDoc,
-  doc,
   getCountFromServer,
   getDoc,
   getDocs,
@@ -12,6 +11,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { TaxonomyTermDoc } from '../types';
 import { slugify } from '../utils/slugify';

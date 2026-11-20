@@ -45,7 +45,8 @@ export function QuickAddToCartButton({
     e.stopPropagation();
     if (busy) return;
 
-    const sizes = product.sizes ?? [];
+    // Digital products have no sizes to pick and ignore stock.
+    const sizes = product.kind === 'digital' ? [] : product.sizes ?? [];
     const tracked = inventory?.trackStock === true;
     if (tracked && isProductOutOfStock(product, inventory)) {
       toast({ title: t('storefront.stock.outOfStock'), variant: 'destructive' });

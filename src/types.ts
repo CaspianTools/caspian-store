@@ -15,8 +15,37 @@ export interface ColorVariant {
   imageUrl: string;
 }
 
+/**
+ * A file a buyer receives for a digital product (v15.4.0). The object lives
+ * in Storage under the store's private `downloads/` folder, which no client
+ * can read: buyers get a short-lived signed link from the `getDownloadUrl`
+ * callable after payment.
+ */
+export interface ProductFile {
+  /** Stable id within the product; order entitlements reference it. */
+  id: string;
+  /** File name shown to the buyer and used for the download. */
+  name: string;
+  /** Storage object path, without the embedded collection prefix. */
+  storagePath: string;
+  size: number;
+  contentType: string;
+}
+
+/** `'digital'` products are delivered as files and never shipped. Default `'physical'`. */
+export type ProductKind = 'physical' | 'digital';
+
 export interface Product {
   id: string;
+  /** v15.4.0. Absent means `'physical'`, the only kind before then. */
+  kind?: ProductKind;
+  /** Files delivered after purchase. Only meaningful when `kind === 'digital'`. */
+  files?: ProductFile[];
+  /**
+   * How many times each file may be downloaded per order. Absent or 0 means
+   * unlimited. Digital products ignore `stock` and `sizes`.
+   */
+  downloadLimit?: number;
   /**
    * URL-safe slug derived from `name`, used for SEO-friendly product URLs
    * (`/product/black-leather-jacket` instead of `/product/abc123XYZ`). Optional
@@ -80,6 +109,20 @@ export interface Product {
   updatedAt?: Timestamp;
 }
 
+export interface OrderDownload {
+  productId: string;
+  fileId: string;
+  name: string;
+  size: number;
+  /** Copied from the product at purchase; 0 = unlimited. */
+  downloadLimit: number;
+}
+
+/** True when the product is delivered as files. */
+export function isDigitalProduct(product: Pick<Product, 'kind'> | null | undefined): boolean {
+  return product?.kind === 'digital';
+}
+
 export interface CartItemRef {
   productId: string;
   quantity: number;
@@ -123,6 +166,8 @@ export interface OrderItem {
    * `price * quantity` when computing the order subtotal. Added in v10.0.0.
    */
   lineDiscount?: number;
+  /** Set by the payment webhook on download lines (v15.4.0); nothing ships for them. */
+  digital?: boolean;
 }
 
 export interface OrderPayment {
@@ -189,6 +234,9 @@ export interface ShippingInfo {
   phone?: string;
 }
 
+/** `ShippingInfo.shippingMethod` on an order of downloads only, which ships nothing (v15.4.0). */
+export const DIGITAL_DOWNLOAD_SHIPPING_METHOD = 'digital-download';
+
 export interface Order {
   id: string;
   userId: string;
@@ -248,6 +296,12 @@ export interface Order {
   refundOf?: string | null;
   /** POS only — see `PosStockShortfall`. Absent on every healthy sale. */
   stockShortfall?: PosStockShortfall[];
+  /**
+   * Files this order entitles the buyer to download, written by the payment
+   * webhook for digital items (v15.4.0). Download counts are kept server-side
+   * in `orderDownloads/{orderId}`; links come from `getDownloadUrl`.
+   */
+  downloads?: OrderDownload[];
   createdAt: Timestamp;
   updatedAt?: Timestamp;
 }

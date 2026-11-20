@@ -9,6 +9,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { send } from './email-sender';
 import { EMAIL_SECRETS } from './secrets';
 import { renderEmail, type EmailSettingsFields, type RenderContext } from './email-renderer';
+import { storeCol } from './store-names';
 
 interface Payload {
   key?: string;
@@ -22,7 +23,7 @@ export const sendTestEmail = onCall(
     if (!uid) throw new HttpsError('unauthenticated', 'Sign in required.');
 
     const db = getFirestore();
-    const userDoc = await db.collection('users').doc(uid).get();
+    const userDoc = await db.collection(storeCol('users')).doc(uid).get();
     if (!userDoc.exists || userDoc.data()?.role !== 'admin') {
       throw new HttpsError('permission-denied', 'Admin role required.');
     }
@@ -36,9 +37,9 @@ export const sendTestEmail = onCall(
     }
 
     const [settingsSnap, templateSnap, siteSnap] = await Promise.all([
-      db.collection('emailSettings').doc('site').get(),
-      db.collection('emailTemplates').doc(key).get(),
-      db.collection('settings').doc('site').get(),
+      db.collection(storeCol('emailSettings')).doc('site').get(),
+      db.collection(storeCol('emailTemplates')).doc(key).get(),
+      db.collection(storeCol('settings')).doc('site').get(),
     ]);
 
     if (!settingsSnap.exists) {

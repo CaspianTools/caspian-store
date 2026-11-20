@@ -28,6 +28,7 @@ import { logger } from 'firebase-functions';
 import { reportFunctionError } from './error-report';
 import { BREVO_API_KEY, SENDGRID_API_KEY } from './secrets';
 import { BrevoClient } from '@getbrevo/brevo';
+import { storeCol } from './store-names';
 
 export interface SendableMessage {
   to: string | string[];
@@ -88,7 +89,7 @@ export async function send(message: SendableMessage): Promise<SendResult> {
 async function loadActiveInstall(): Promise<EmailPluginInstallDoc | null> {
   const db = getFirestore();
   const snap = await db
-    .collection('emailPluginInstalls')
+    .collection(storeCol('emailPluginInstalls'))
     .where('enabled', '==', true)
     .orderBy('order', 'asc')
     .limit(1)

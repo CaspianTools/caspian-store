@@ -1,5 +1,4 @@
 import {
-  doc,
   getDoc,
   getDocs,
   orderBy,
@@ -8,6 +7,7 @@ import {
   Timestamp,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { UserAddress, UserProfile } from '../types';
 import { caspianCollections } from '../firebase/collections';
 

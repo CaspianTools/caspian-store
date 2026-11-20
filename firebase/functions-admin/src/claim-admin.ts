@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { storeCol } from './store-names';
 
 /**
  * Callable that promotes the caller to admin, **only if no admin exists yet**.
@@ -30,7 +31,7 @@ export const claimAdmin = onCall({ cors: true }, async (request) => {
   const db = getFirestore();
 
   const existingAdmins = await db
-    .collection('users')
+    .collection(storeCol('users'))
     .where('role', '==', 'admin')
     .limit(1)
     .get();
@@ -41,7 +42,7 @@ export const claimAdmin = onCall({ cors: true }, async (request) => {
     );
   }
 
-  const userRef = db.collection('users').doc(uid);
+  const userRef = db.collection(storeCol('users')).doc(uid);
   const userSnap = await userRef.get();
   if (!userSnap.exists) {
     throw new HttpsError(

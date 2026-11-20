@@ -45,8 +45,8 @@ node /tmp/scs/scaffold/create.mjs my-store --package-tag v8.0.0
 ## 1. Install the package
 
 ```bash
-npm install github:CaspianTools/script-caspian-store#v15.1.0 firebase
-# v15.1.0 is the current release. For other versions, see:
+npm install github:CaspianTools/script-caspian-store#v15.4.0 firebase
+# v15.4.0 is the current release. For other versions, see:
 #   https://github.com/CaspianTools/script-caspian-store/releases
 # Pinning to a specific sha is also fine:
 # npm install github:CaspianTools/script-caspian-store#<sha>
@@ -251,6 +251,45 @@ Same as Vite, but read env vars with `process.env.REACT_APP_*`.
 
 ---
 
+## 3.5. Server mode — no Firebase CLI, no Cloud Functions (v15.3.0+, recommended)
+
+Steps 4 and 5 below need the Firebase CLI and deploy rights on the project. A store owner who has neither can run everything from the website's own server instead:
+
+1. Add one route, `src/app/api/caspian-store/[...path]/route.ts` (the scaffolder writes it):
+
+   ```ts
+   import Stripe from 'stripe';                       // only for card payments: npm install stripe
+   import { caspianHandleApi } from '@caspian-explorer/script-caspian-store/server';
+
+   export const runtime = 'nodejs';
+   export const dynamic = 'force-dynamic';
+   export const maxDuration = 300;
+
+   const handle = (req: Request) => caspianHandleApi(req, { stripe: Stripe });
+   export const GET = handle;
+   export const POST = handle;
+   ```
+
+2. Pass `serverApi="/api/caspian-store"` to `<CaspianStoreProvider>`.
+
+3. Open `/admin`. On a brand-new store the first signed-in account presses **Claim admin**. That installs the security rules and indexes and makes the account admin, in one step. After a library update, a banner at the top of the admin offers **Install now** whenever the project's rules or indexes are older than the installed version.
+
+What runs where:
+
+| Needs | Server mode | Classic |
+| --- | --- | --- |
+| Firestore + Storage rules, composite indexes | Admin banner, one click | `firebase deploy` (step 4) |
+| Checkout, order lookup, admin roles, guest-order linking | `/api/caspian-store/call/*` | Cloud Functions (step 5) |
+| Stripe webhook | `https://<site>/api/caspian-store/stripe/webhook` | Cloud Function URL |
+| `/admin/about` Update button | `/api/caspian-store/update` | same |
+| Emails, scheduled publishing, retention cleanup, verified-purchase badges | still Cloud Functions (optional) | Cloud Functions |
+
+**Credentials.** On Firebase App Hosting (and Cloud Run) the server uses the backend's own service account; there is nothing to paste. On Vercel or a VPS, set `FIREBASE_SERVICE_ACCOUNT` to a service-account JSON key. That account needs the **Firebase Admin** role (`roles/firebase.admin`), which covers the rules, indexes, Firestore and Auth access the server uses. If it lacks the role, the admin banner names the account and links to the IAM page to grant it.
+
+**Secrets.** Card payments read `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` from the host environment. On App Hosting, run `firebase apphosting:secrets:set STRIPE_SECRET_KEY` (repeat for `STRIPE_WEBHOOK_SECRET`) and map both in `apphosting.yaml`.
+
+The same code runs in both modes: the server entry bundles the Cloud Functions sources with a small shim for the Functions runtime. A store can switch modes, or run both, without anything drifting.
+
 ## 4. Deploy Firestore rules + indexes + Storage rules
 
 The package ships deployable files under `firebase/`.
@@ -276,7 +315,7 @@ v1.16.0+ ships **three codebases** so you can deploy admin triggers without havi
 
 - `caspian-admin` — `onUserCreate` (auto-promote first user to admin), `claimAdmin`, scheduled retention cleanup, `linkGuestOrdersOnUserCreate` (re-stamps prior guest orders to a newly-registered account with the same **verified** email — v9.1+, verification required from v15.1.0) plus the `linkMyGuestOrders` callable the library calls itself once a password account verifies its email, `stampVerifiedPurchase` (sets the review "verified purchase" badge server-side — v15.1.0), `getGuestOrder` (unauthenticated HTTPS callable that powers `<GuestOrderLookupPage />` at `/order-status` — v9.1+). **No secrets**, no provider deps. Always deployable.
 - `caspian-email` (v3.0.0+) — transactional email triggers (`runEmailOnOrderCreate`, `runEmailOnOrderUpdate`, `runEmailOnContactCreate`) + `sendTestEmail` callable. **v8.0.0+ requires Cloud Secret Manager:** before deploy, run `firebase functions:secrets:set CASPIAN_EMAIL_SENDGRID_API_KEY` and/or `CASPIAN_EMAIL_BREVO_API_KEY` (you only need the secrets for providers you actually use). Functions read the keys via `defineSecret(...)` at runtime.
-- `caspian-stripe` — `createStripeCheckoutSession`, `stripeWebhook`, `getStripeSession`. Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` as Functions secrets. Charges in the currency set under **Settings → General** (`settings/site.currency`, falling back to `scriptSettings.defaultCurrency`, then USD) — before v15.1.0 every session was created in USD regardless.
+- `caspian-stripe` — `createStripeCheckoutSession`, `stripeWebhook`, `getStripeSession`. Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` as Functions secrets. Charges in the currency set under **Settings → General** (`settings/site.currency`, falling back to `scriptSettings.defaultCurrency`, then USD) — before v15.1.0 every session was created in USD regardless. From v15.2.0 it also charges tax as its own line, computed from **Settings → Tax** by the same rule as the checkout page's tax row; before that, Stripe orders never collected the tax the checkout showed.
 - `caspian-pos` (v10.0.0–v14.0.0) — the in-person register's `commitPosSale` and `getPosCatalogDelta`. **Dormant since v14.0.0** and no longer scaffolded: nothing on a generated site calls them. Kept in the package so stores that already deployed them are not broken.
 - `caspian-instagram` (v9.21.0+) — the Instagram channel for store staff: `linkInstagram` / `unlinkInstagram`, `instagramInbox` (feed + comments), `replyInstagramComment` / `setInstagramCommentHidden` / `deleteInstagramComment`, `publishInstagramMedia` (publish a product), `deleteInstagramMedia`, and a scheduled token refresh. Requires `META_APP_ID` + `META_APP_SECRET` as Functions secrets (`defineSecret`). Scaffold it with `--with-instagram`.
 
@@ -318,7 +357,7 @@ firebase functions:secrets:set CASPIAN_EMAIL_BREVO_API_KEY        # xkeysib-…
 npm run deploy:email    # v3.0.0+ helper
 ```
 
-After deploy, configure the provider at `/admin/plugins/email-providers`: browse the catalog (SendGrid, Brevo), install the one whose secret you set, click **Enable**. The install record in `emailPluginInstalls/{id}` only carries the merchant-facing display name + which provider is active; the actual API key never touches Firestore. If no provider is installed (or the secret value is empty), order + contact triggers log a warning and return without sending — harmless for stores that don't use email.
+After deploy, go to `/admin/plugins` and switch on the provider whose secret you set (SendGrid or Brevo): the switch opens its settings page (`/admin/plugins/sendgrid` or `/admin/plugins/brevo`), where **Save** switches it on. The install record in `emailPluginInstalls/{id}` only carries the merchant-facing display name + which provider is active; the actual API key never touches Firestore. If no provider is switched on (or the secret value is empty), order + contact triggers log a warning and return without sending — harmless for stores that don't use email.
 
 > **Upgrading from pre-v8.0.0?** Your existing installs have `config.apiKey` in Firestore — that field is no longer read. Run the `firebase functions:secrets:set` commands above with the same key you have in Firestore, redeploy `caspian-email`, and the existing install records keep working unchanged. You can clear the legacy `config.apiKey` from Firestore at your leisure (the new dispatcher ignores it either way).
 
@@ -339,7 +378,7 @@ https://<region>-<project-id>.cloudfunctions.net/stripeWebhook
 
 Subscribe to `checkout.session.completed`. Paste the resulting `whsec_…` into the `STRIPE_WEBHOOK_SECRET` secret and redeploy.
 
-**Install Stripe in the admin UI.** Once the Cloud Functions are deployed, sign in as admin and go to `/admin/plugins/payments`. Click **Browse providers** → **Install** on the Stripe card, paste your publishable key (`pk_live_…` or `pk_test_…`), save, then click **Enable**. The publishable key is stored in Firestore under `paymentPluginInstalls`; only the secret/webhook keys live in Cloud Functions secrets. `useCheckout` picks up enabled plugin installs automatically — no redeploy needed after flipping a provider on or off.
+**Switch Stripe on in the admin UI.** Once the Cloud Functions are deployed, sign in as admin, go to `/admin/plugins` and click the **Enable** switch on the Stripe card. It opens Stripe's settings page (`/admin/plugins/stripe`); paste your publishable key (`pk_live_…` or `pk_test_…`) and click **Save**, which switches it on. The publishable key is stored in Firestore under `paymentPluginInstalls`; only the secret/webhook keys live in Cloud Functions secrets. `useCheckout` picks up enabled plugin installs automatically — no redeploy needed after flipping a provider on or off.
 
 **Instagram codebase (v9.21.0+ — only when you run the Instagram channel):**
 
@@ -603,6 +642,21 @@ const messages = {
 
 RTL locales (ar, he, fa, ur) automatically set `--caspian-direction: rtl` on the document — point your CSS at it. See the package's [i18n README](./src/i18n) for ICU-subset plural syntax.
 
+### Locale in the URL (`/fr/cart`, v15.3.0+)
+
+When the host app puts the locale in the path (a next-intl `[locale]` segment, say), mount the catch-all under it — `app/[locale]/[[...slug]]/page.tsx` — and pin `locale` from the URL so the provider never falls back to the device's saved choice. `CaspianRoot` already ignores a leading two-letter segment when it routes.
+
+Then pick **one** way to keep that segment on the library's own links:
+
+- your adapters already add it (next-intl's `Link` and `useRouter` from `createNavigation`) — pass them as `adapters.Link` / `adapters.useNavigation` and leave `localeInUrl` off; or
+- your adapters are plain `next/link` / `next/navigation` — pass `localeInUrl`, and the library prefixes every root-relative href with the current page's locale segment.
+
+```tsx
+<CaspianStoreProvider firebaseConfig={...} locale={locale} messagesByLocale={...} localeInUrl adapters={...}>
+```
+
+Turning `localeInUrl` on together with locale-aware adapters prefixes links twice. The Stripe success and cancel URLs that `CaspianRoot` infers keep the segment either way.
+
 ---
 
 ## 9.5. Make it installable (PWA, optional, v9.10.0+)
@@ -857,6 +911,13 @@ Trigger a redeploy so the route sees the new vars.
 **Step 3 — Click Update.** Open `/admin/about`, sign in as an admin, click **Update to vX.Y.Z**. The response panel shows the pushed commit SHA and a github.com link to it. Your host detects the push (typically within 30 seconds) and starts a normal rebuild. Refresh `/admin/about` after the rollout finishes (3–5 min for App Hosting; 1–2 min for Vercel) — the **Installed** line shows the new version.
 
 **What gets committed.** A single commit titled `Bump <package-name> to vX.Y.Z` containing only `package.json` (and `package-lock.json` if your repo has one). The route's best-effort lockfile updater rewrites the `resolved` SHA for the script package against the new tag's commit; if the new release ships a different transitive dep tree, the build may fail with "lock file out of sync" and you'll need to run `npm install` locally + commit the regenerated lockfile yourself. Most minor-version bumps don't trigger this.
+
+**Rules, indexes and Cloud Functions ship too (v15.3.0+).** The button only changes `package.json`, so on its own a release that touches `firestore.rules` or a Cloud Function would still need a manual `firebase deploy`. Add the workflow the scaffolder writes (`.github/workflows/caspian-firebase-deploy.yml`; for an existing site copy it from `node_modules/@caspian-explorer/script-caspian-store/scaffold/caspian-firebase-deploy.yml`). On every push to `main` that changes `package.json` or `package-lock.json` it installs the new version, runs `sync-rules.mjs` and `sync-functions.mjs` (which refreshes each `functions-*` codebase your `firebase.json` lists from the package), and deploys rules, indexes, Storage rules and functions. One-time setup in the repo's **Settings → Secrets and variables → Actions**:
+
+- secret `FIREBASE_SERVICE_ACCOUNT` — a JSON key for a service account with **Firebase Admin**, **Cloud Functions Admin**, **Service Account User**, **Artifact Registry Administrator** and **Secret Manager Viewer**
+- variable `FIREBASE_PROJECT_ID` — optional; defaults to the key's `project_id`
+
+Without the secret the workflow logs a notice and skips, so it never fails a push. Functions secrets (`STRIPE_SECRET_KEY` and friends) must already exist in the project, as for a manual deploy. You can also run the sync by hand with `npm run firebase:sync-functions`.
 
 **Token rotation.** If a token expires (or you suspect it leaked), generate a new one with the same scoping and replace it in the secret store. The Firebase CLI command above (`firebase apphosting:secrets:set …`) creates a new secret version automatically and the next rollout picks it up. Vercel: update the env var value and trigger a redeploy.
 

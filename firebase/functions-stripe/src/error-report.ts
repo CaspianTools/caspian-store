@@ -9,6 +9,7 @@
 
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
+import { storeCol } from './store-names';
 
 const CODEBASE = 'caspian-stripe';
 const MAX_MESSAGE = 2000;
@@ -64,7 +65,7 @@ export async function reportFunctionError(
       doc.context = safeCtx;
     }
     if (process.env.GCLOUD_PROJECT) doc.firebaseProjectId = process.env.GCLOUD_PROJECT;
-    await getFirestore().collection('errorLogs').add(doc);
+    await getFirestore().collection(storeCol('errorLogs')).add(doc);
   } catch (reporterErr) {
     logger.warn('[error-report] Failed to persist error log:', reporterErr);
   }

@@ -5,8 +5,10 @@ import { Button } from '../../ui/button';
 import { HtmlContent } from '../../ui/html-content';
 import { Badge, Skeleton } from '../../ui/misc';
 import { ProductGallery } from '../product-gallery';
-import { QuantitySelector, SizeSelector } from '../product-selectors';
+import { ColorSelector, QuantitySelector, SizeSelector } from '../product-selectors';
+import { DigitalDownloadBadge } from '../digital-download-badge';
 import { ProductReviews } from '../reviews/product-reviews';
+import { RelatedProducts } from '../related-products';
 import type { ProductDetailPageProps } from '../product-detail-page';
 import { useProductDetailState } from './use-product-detail-state';
 import { useScriptSettings } from '../../context/script-settings-context';
@@ -25,7 +27,14 @@ import { cn } from '../../utils/cn';
  * appears under price, full description below the fold.
  */
 export function ProductDetailTech(props: ProductDetailPageProps) {
-  const { formatPrice: formatPriceProp, hideReviews, className } = props;
+  const {
+    formatPrice: formatPriceProp,
+    hideReviews,
+    hideRelated,
+    relatedLimit,
+    getProductHref,
+    className,
+  } = props;
   const { settings } = useScriptSettings();
   const currency = useFormatCurrency(settings.defaultCurrency);
   const formatPrice = formatPriceProp ?? ((p: number) => currency.format(p));
@@ -36,6 +45,9 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
     brandName,
     blurb,
     selectedSize,
+    selectedColor,
+    setSelectedColor,
+    galleryImages,
     setSelectedSize,
     sizeSelectorRef,
     quantity,
@@ -47,6 +59,8 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
     handleAddToCart,
     handleStickyAddToCart,
     stickyHint,
+    inventory,
+    taxConfig,
     derived,
     t,
   } = state;
@@ -155,6 +169,20 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
             </div>
           )}
 
+          {derived.hasColors && (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>
+                {t('product.color')}
+                {selectedColor ? `: ${selectedColor}` : ''}
+              </p>
+              <ColorSelector
+                variants={product.colorVariants!}
+                value={selectedColor}
+                onChange={setSelectedColor}
+              />
+            </div>
+          )}
+
           {derived.hasSizes && (
             <div ref={sizeSelectorRef} tabIndex={-1} style={{ marginBottom: 16, outline: 'none' }}>
               <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.size')}</p>
@@ -167,16 +195,22 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
             </div>
           )}
 
-          <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
-            <QuantitySelector value={quantity} onChange={setQuantity} />
-          </div>
+          {derived.isDigital ? (
+            <div style={{ marginBottom: 16 }}>
+              <DigitalDownloadBadge />
+            </div>
+          ) : (
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{t('product.quantity')}</p>
+              <QuantitySelector value={quantity} onChange={setQuantity} />
+            </div>
+          )}
 
           <Button size="lg" onClick={handleAddToCart}>
             {t('product.addToCart')} →
           </Button>
         </div>
-        <ProductGallery images={product.images} />
+        <ProductGallery key={selectedColor ?? ''} images={galleryImages} />
       </div>
 
       <div className="caspian-sticky-cta">
@@ -251,6 +285,18 @@ export function ProductDetailTech(props: ProductDetailPageProps) {
             }}
           />
         </section>
+      )}
+
+      {!hideRelated && (
+        <RelatedProducts
+          product={product}
+          limit={relatedLimit}
+          getProductHref={getProductHref}
+          formatPrice={formatPrice}
+          inventory={inventory}
+          taxConfig={taxConfig}
+          style={{ marginTop: 48, paddingTop: 28, borderTop: '1px solid rgba(255,255,255,0.08)' }}
+        />
       )}
     </div>
   );

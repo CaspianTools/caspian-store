@@ -1,11 +1,11 @@
 'use client';
 
+import { caspianCallable } from '../services/caspian-callable';
 import { useEffect, useMemo, useState } from 'react';
-import { httpsCallable } from 'firebase/functions';
 import { USER_ROLES, type UserProfile, type UserRole } from '../types';
 import { listUsers } from '../services/user-service';
 import { reportServiceError } from '../services/error-log-service';
-import { useCaspianFirebase, useCaspianLink } from '../provider/caspian-store-provider';
+import { useCaspianFirebase, useCaspianLink, useCaspianStore } from '../provider/caspian-store-provider';
 import { useAuth } from '../context/auth-context';
 import { useT } from '../i18n/locale-context';
 import { Badge, Skeleton } from '../ui/misc';
@@ -24,6 +24,8 @@ export function AdminUsersPage({ className }: AdminUsersPageProps) {
   const { db, functions } = useCaspianFirebase();
   const Link = useCaspianLink();
   const { user } = useAuth();
+  // Embedded: the host grants store admin, so roles are not edited here.
+  const { embedded } = useCaspianStore();
   const t = useT();
   const [users, setUsers] = useState<UserProfile[] | null>(null);
   const [search, setSearch] = useState('');
@@ -72,7 +74,7 @@ export function AdminUsersPage({ className }: AdminUsersPageProps) {
     try {
       // `setUserRole` supersedes the two-role promoteUserToAdmin /
       // demoteAdminToCustomer callables, which stay deployed for back-compat.
-      await httpsCallable(functions, 'setUserRole')({ uid: target.uid, role: nextRole });
+      await caspianCallable(functions, 'setUserRole')({ uid: target.uid, role: nextRole });
       // Optimistic local update — avoid a refetch round-trip.
       setUsers((prev) =>
         prev ? prev.map((u) => (u.uid === target.uid ? { ...u, role: nextRole } : u)) : prev,
@@ -132,9 +134,9 @@ export function AdminUsersPage({ className }: AdminUsersPageProps) {
             <TR>
               <TH>{t('admin.users.col.name')}</TH>
               <TH>{t('admin.users.col.email')}</TH>
-              <TH>{t('admin.users.col.role')}</TH>
+              {!embedded && <TH>{t('admin.users.col.role')}</TH>}
               <TH>{t('admin.users.col.joined')}</TH>
-              <TH>{t('admin.users.col.actions')}</TH>
+              {!embedded && <TH>{t('admin.users.col.actions')}</TH>}
             </TR>
           </THead>
           <TBody>
@@ -151,14 +153,17 @@ export function AdminUsersPage({ className }: AdminUsersPageProps) {
                     </Link>
                   </TD>
                   <TD style={{ fontSize: 13, color: '#333' }}>{u.email}</TD>
-                  <TD>
-                    <Badge variant={isAdmin ? 'secondary' : 'default'}>
-                      {u.role ?? 'customer'}
-                    </Badge>
-                  </TD>
+                  {!embedded && (
+                    <TD>
+                      <Badge variant={isAdmin ? 'secondary' : 'default'}>
+                        {u.role ?? 'customer'}
+                      </Badge>
+                    </TD>
+                  )}
                   <TD style={{ color: '#888', fontSize: 13 }}>
                     {u.createdAt?.toDate ? u.createdAt.toDate().toLocaleString() : '—'}
                   </TD>
+                  {!embedded && (
                   <TD data-label="">
                     {isAdmin && isSelf ? (
                       <span style={{ color: '#888', fontSize: 12 }}>
@@ -184,6 +189,7 @@ export function AdminUsersPage({ className }: AdminUsersPageProps) {
                       </div>
                     )}
                   </TD>
+                  )}
                 </TR>
               );
             })}

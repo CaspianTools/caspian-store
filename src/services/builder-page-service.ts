@@ -1,7 +1,6 @@
 import {
   Timestamp,
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   orderBy,
@@ -10,6 +9,7 @@ import {
   updateDoc,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { BuilderPage } from '../types';
 import { caspianCollections } from '../firebase/collections';
 import { cloneWithNewIds } from '../page-builder/block-factory';

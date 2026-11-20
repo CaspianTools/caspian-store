@@ -44,6 +44,8 @@ import {
 import { useT } from '../i18n/locale-context';
 import { Badge } from '../ui/misc';
 import { cn } from '../utils/cn';
+import { AdminSetupBanner } from './admin-setup-banner';
+import { stripLocalePrefix } from '../utils/strip-locale-prefix';
 import { CASPIAN_STORE_VERSION } from '../version';
 import { AdminNotificationsBell } from './admin-notifications-bell';
 import { AdminOnboardingProgress } from './admin-onboarding-progress';
@@ -52,6 +54,7 @@ import {
   type EnabledPluginCategory,
   type EnabledPluginInstall,
 } from './use-enabled-plugin-installs';
+import { findCatalogPlugin } from './admin-plugin-registry';
 
 export interface AdminNavLeaf {
   kind?: 'leaf';
@@ -306,8 +309,9 @@ export function AdminShell({
     [navItems, enabledInstalls],
   );
 
+  const pathname = stripLocalePrefix(nav.pathname);
   const isActive = (href: string) =>
-    nav.pathname === href || (href !== '/admin' && nav.pathname.startsWith(href));
+    pathname === href || (href !== '/admin' && pathname.startsWith(href));
 
   // Seed sidebar open/closed and per-group expanded state from localStorage.
   // Auto-expand the group containing the active route so a hard refresh on
@@ -632,7 +636,10 @@ export function AdminShell({
           </div>
         </header>
 
-        <main className="caspian-admin-main" style={{ flex: 1, minWidth: 0, padding: 24 }}>{children}</main>
+        <main className="caspian-admin-main" style={{ flex: 1, minWidth: 0, padding: 24 }}>
+          <AdminSetupBanner />
+          {children}
+        </main>
       </div>
     </div>
   );
@@ -883,23 +890,30 @@ function AdminUpdateBadge({ owner, repo }: { owner: string; repo: string }) {
 
 /**
  * Returns a copy of `items` where any AdminNavGroup with id `plugins` has
- * its `children` replaced with a leaf per enabled install. Called on every
- * render of AdminShell so enabling/disabling a plugin updates the sidebar
- * without a page reload. Keeps other groups untouched.
+ * its `children` replaced with a leaf per plugin that has an enabled
+ * install, linking to that plugin's settings page. A plugin with several
+ * enabled installs (two flat-rate methods) is still one leaf, named after
+ * the catalog entry. Called on every render of AdminShell so enabling or
+ * disabling a plugin updates the sidebar without a page reload.
  */
 function injectPluginChildren(
   items: AdminNavItem[],
   installs: EnabledPluginInstall[],
 ): AdminNavItem[] {
-  return items.map((item) => {
-    if (!isGroup(item) || item.id !== 'plugins') return item;
-    const children: AdminNavLeaf[] = installs.map((x) => ({
-      href: `/admin/plugins/${x.pluginId}/${x.installId}`,
-      label: x.name,
-      icon: iconForPluginCategory(x.category),
-    }));
-    return { ...item, children };
-  });
+  const byPlugin = new Map<string, EnabledPluginInstall[]>();
+  for (const x of installs) {
+    const list = byPlugin.get(x.pluginId) ?? [];
+    list.push(x);
+    byPlugin.set(x.pluginId, list);
+  }
+  const children: AdminNavLeaf[] = [...byPlugin.entries()].map(([pluginId, list]) => ({
+    href: `/admin/plugins/${pluginId}`,
+    label: list.length === 1 ? list[0].name : (findCatalogPlugin(pluginId)?.name ?? list[0].name),
+    icon: iconForPluginCategory(list[0].category),
+  }));
+  return items.map((item) =>
+    !isGroup(item) || item.id !== 'plugins' ? item : { ...item, children },
+  );
 }
 
 function iconForPluginCategory(category: EnabledPluginCategory): ReactNode {
