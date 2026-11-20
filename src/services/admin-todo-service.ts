@@ -1,7 +1,6 @@
 import {
   addDoc,
   deleteDoc,
-  doc,
   getDocs,
   onSnapshot,
   orderBy,
@@ -14,6 +13,7 @@ import {
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { AdminTodo } from '../types';
 import { stripUndefined } from '../utils/strip-undefined';

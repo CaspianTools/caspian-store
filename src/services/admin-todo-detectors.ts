@@ -1,5 +1,4 @@
 import {
-  doc,
   getDoc,
   getDocs,
   limit,
@@ -8,6 +7,7 @@ import {
   type CollectionReference,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import { DEFAULT_SCRIPT_SETTINGS, type AdminTodo } from '../types';
 

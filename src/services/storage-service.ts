@@ -6,7 +6,13 @@ import {
   uploadBytes,
   type FirebaseStorage,
 } from 'firebase/storage';
-import { doc, getDoc, updateDoc, Timestamp, type Firestore } from 'firebase/firestore';
+import {
+  getDoc,
+  updateDoc,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc, storeStoragePath } from '../firebase/store-paths';
 import { updateProfile, type Auth } from 'firebase/auth';
 import type { Functions } from 'firebase/functions';
 
@@ -46,7 +52,7 @@ export async function uploadProfilePhoto({
 
   const ext = extFromType(file.type);
   const path = PROFILE_PHOTO_PATH(uid, ext);
-  const storageRef = ref(storage, path);
+  const storageRef = ref(storage, storeStoragePath(storage, path));
   await uploadBytes(storageRef, file, { contentType: file.type });
   const url = await getDownloadURL(storageRef);
 
@@ -108,7 +114,7 @@ export async function uploadAdminImage({
   if (file.size > maxBytes) {
     throw new Error(`Image must be under ${Math.round(maxBytes / 1024 / 1024)} MB.`);
   }
-  const storageRef = ref(storage, path);
+  const storageRef = ref(storage, storeStoragePath(storage, path));
   try {
     await uploadBytes(storageRef, file, { contentType: file.type });
   } catch (err) {
@@ -259,7 +265,7 @@ export async function deleteStorageObject(
   path: string,
 ): Promise<void> {
   try {
-    await deleteObject(ref(storage, path));
+    await deleteObject(ref(storage, storeStoragePath(storage, path)));
   } catch {
     /* ignore missing objects */
   }
@@ -278,7 +284,7 @@ export async function removeProfilePhoto({
   // Best-effort cleanup of any of the allowed extensions.
   for (const ext of LEGACY_PROFILE_PHOTO_PATHS) {
     try {
-      await deleteObject(ref(storage, PROFILE_PHOTO_PATH(uid, ext)));
+      await deleteObject(ref(storage, storeStoragePath(storage, PROFILE_PHOTO_PATH(uid, ext))));
     } catch {
       /* ignore missing objects */
     }

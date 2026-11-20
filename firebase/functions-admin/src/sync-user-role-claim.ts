@@ -1,6 +1,7 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
+import { storeCol } from './store-names';
 
 /** Roles that are mirrored onto the Auth token. `customer` carries no claim. */
 const CLAIM_ROLES = ['admin', 'staff'] as const;
@@ -33,7 +34,7 @@ function asClaimRole(value: unknown): ClaimRole | null {
  * and nothing else. The file and the const carry the accurate name; the
  * deployed identity stays put.
  */
-export const syncUserRoleClaim = onDocumentWritten('users/{uid}', async (event) => {
+export const syncUserRoleClaim = onDocumentWritten(storeCol('users') + '/{uid}', async (event) => {
   const uid = event.params.uid;
   const newRole = event.data?.after.data()?.role;
   const oldRole = event.data?.before.data()?.role;

@@ -3,6 +3,7 @@ import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 /**
  * Daily personal-data retention cleanup. Reads `settings/site` for the
@@ -36,7 +37,7 @@ export const runRetentionCleanup = onSchedule(
   },
   async () => {
     const db = getFirestore();
-    const settingsDoc = await db.collection('settings').doc('site').get();
+    const settingsDoc = await db.collection(storeCol('settings')).doc('site').get();
     const privacy =
       (settingsDoc.exists ? (settingsDoc.data()?.privacy as RetentionConfig | undefined) : undefined) ??
       undefined;
@@ -129,7 +130,7 @@ async function deleteInactiveAccounts(
 ): Promise<number> {
   const cutoffTs = Timestamp.fromMillis(cutoffMs);
   const snap = await db
-    .collection('users')
+    .collection(storeCol('users'))
     .where('createdAt', '<', cutoffTs)
     .where('role', '==', 'customer')
     .limit(BATCH_SIZE)
@@ -163,7 +164,7 @@ async function deleteOrdersWithStatus(
 
   for (const status of statuses) {
     const snap = await db
-      .collection('orders')
+      .collection(storeCol('orders'))
       .where('status', '==', status)
       .where('createdAt', '<', cutoffTs)
       .limit(BATCH_SIZE)
@@ -187,7 +188,7 @@ async function deleteErrorLogs(
 ): Promise<number> {
   const cutoffTs = Timestamp.fromMillis(cutoffMs);
   const snap = await db
-    .collection('errorLogs')
+    .collection(storeCol('errorLogs'))
     .where('timestamp', '<', cutoffTs)
     .limit(BATCH_SIZE)
     .get();

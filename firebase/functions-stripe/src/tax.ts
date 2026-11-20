@@ -1,3 +1,4 @@
+import { storeCol } from './store-names';
 /**
  * Server-side mirror of the checkout page's tax estimate
  * (src/components/checkout-page.tsx, `taxAmount`). Before v15.2 the checkout
@@ -30,7 +31,7 @@ export async function computeTax(
   subtotal: number,
   shippingCountry: string | undefined,
 ): Promise<number> {
-  const site = (await db.collection('settings').doc('site').get()).data() ?? {};
+  const site = (await db.collection(storeCol('settings')).doc('site').get()).data() ?? {};
   const mode = site.taxMode;
   let taxRate = 0;
   if (mode === 'flat') {

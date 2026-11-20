@@ -5,6 +5,7 @@ import Stripe from 'stripe';
 import { resolveStoreCurrency, toStripeAmount } from './currency';
 import { assertShippingCost, type ShippingCartLine } from './shipping-rates';
 import { computeTax } from './tax';
+import { storeCol } from './store-names';
 
 const STRIPE_SECRET = defineSecret('STRIPE_SECRET_KEY');
 
@@ -134,7 +135,7 @@ export const createStripeCheckoutSession = onCall(
     // human-readable brand name at the moment of purchase — falling back to
     // the raw value for legacy products that haven't been migrated yet, and
     // for the empty-string case.
-    const brandsSnap = await db.collection('productBrands').get();
+    const brandsSnap = await db.collection(storeCol('productBrands')).get();
     const brandNameById = new Map<string, string>();
     for (const b of brandsSnap.docs) {
       const name = (b.data() as { name?: string }).name;
@@ -151,7 +152,7 @@ export const createStripeCheckoutSession = onCall(
       if (!Number.isInteger(item.quantity) || item.quantity < 1) {
         throw new HttpsError('invalid-argument', 'Item quantity must be a positive integer.');
       }
-      const snap = await db.collection('products').doc(item.productId).get();
+      const snap = await db.collection(storeCol('products')).doc(item.productId).get();
       if (!snap.exists) {
         throw new HttpsError('not-found', `Product ${item.productId} not found.`);
       }
@@ -256,7 +257,7 @@ export const createStripeCheckoutSession = onCall(
     let appliedPromoCode: string | null = null;
     if (data.promoCode) {
       const snap = await db
-        .collection('promoCodes')
+        .collection(storeCol('promoCodes'))
         .where('code', '==', data.promoCode.toUpperCase())
         .where('isActive', '==', true)
         .limit(1)
@@ -290,7 +291,7 @@ export const createStripeCheckoutSession = onCall(
       currency,
       locale: data.locale ?? '',
     };
-    const pendingRef = db.collection('pendingCheckouts').doc();
+    const pendingRef = db.collection(storeCol('pendingCheckouts')).doc();
     await pendingRef.set({ ...pending, createdAt: FieldValue.serverTimestamp() });
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {

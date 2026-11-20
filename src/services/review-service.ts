@@ -1,7 +1,6 @@
 import {
   addDoc,
   deleteDoc,
-  doc,
   getDocs,
   orderBy,
   query,
@@ -11,6 +10,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { FirestoreReview, ModerationStatus, ReviewPolicy } from '../types';
 import { hasUserPurchasedProduct } from './order-service';

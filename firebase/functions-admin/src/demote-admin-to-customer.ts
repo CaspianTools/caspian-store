@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { storeCol } from './store-names';
 
 /**
  * Admin-only callable: demotes another admin to `role: 'customer'`.
@@ -48,12 +49,12 @@ export const demoteAdminToCustomer = onCall({ cors: true }, async (request) => {
 
   const db = getFirestore();
 
-  const callerSnap = await db.collection('users').doc(callerUid).get();
+  const callerSnap = await db.collection(storeCol('users')).doc(callerUid).get();
   if (!callerSnap.exists || callerSnap.data()?.role !== 'admin') {
     throw new HttpsError('permission-denied', 'Only admins can demote users.');
   }
 
-  const targetRef = db.collection('users').doc(targetUid);
+  const targetRef = db.collection(storeCol('users')).doc(targetUid);
   const targetSnap = await targetRef.get();
   if (!targetSnap.exists) {
     throw new HttpsError('not-found', 'Target user profile does not exist.');
@@ -65,7 +66,7 @@ export const demoteAdminToCustomer = onCall({ cors: true }, async (request) => {
   // Last-admin guard. limit(2) is enough to distinguish "only one" from "more
   // than one" without paying for a full count.
   const adminsSnap = await db
-    .collection('users')
+    .collection(storeCol('users'))
     .where('role', '==', 'admin')
     .limit(2)
     .get();

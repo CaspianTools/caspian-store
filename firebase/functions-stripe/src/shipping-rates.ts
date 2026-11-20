@@ -1,4 +1,5 @@
 import { HttpsError } from 'firebase-functions/v2/https';
+import { storeCol } from './store-names';
 
 /**
  * Server-side mirror of the storefront shipping calculator
@@ -69,7 +70,7 @@ async function listOfferedRates(
   subtotal: number,
   lines: ShippingCartLine[],
 ): Promise<OfferedRate[]> {
-  const snap = await db.collection('shippingPluginInstalls').where('enabled', '==', true).get();
+  const snap = await db.collection(storeCol('shippingPluginInstalls')).where('enabled', '==', true).get();
   const rates: OfferedRate[] = [];
   for (const doc of snap.docs) {
     const data = doc.data();

@@ -1,4 +1,10 @@
-import { deleteField, doc, getDoc, setDoc, type Firestore } from 'firebase/firestore';
+import {
+  deleteField,
+  getDoc,
+  setDoc,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { SiteSettings, SocialLink } from '../types';
 
 /**

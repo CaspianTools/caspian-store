@@ -1,6 +1,5 @@
 import {
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   orderBy,
@@ -10,6 +9,7 @@ import {
   writeBatch,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { DraftLayout, PageBlock, PageLayout, SectionInstance } from '../types';
 import { pageLayoutRevisions } from '../firebase/collections';
 import { stripUndefinedDeep } from '../utils/strip-undefined';

@@ -4,6 +4,7 @@ import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import Stripe from 'stripe';
 import { reportFunctionError } from './error-report';
 import type { CheckoutShippingInfo, PendingCheckout, PendingOrderItem } from './stripe-checkout';
+import { storeCol } from './store-names';
 
 const STRIPE_SECRET = defineSecret('STRIPE_SECRET_KEY');
 const STRIPE_WEBHOOK_SECRET = defineSecret('STRIPE_WEBHOOK_SECRET');
@@ -53,7 +54,7 @@ export const stripeWebhook = onRequest(
 
     const session = event.data.object as Stripe.Checkout.Session;
     const db = getFirestore();
-    const eventRef = db.collection('stripeEvents').doc(event.id);
+    const eventRef = db.collection(storeCol('stripeEvents')).doc(event.id);
 
     try {
       // --- Duplicate detection (cheap pre-checks; the transaction is authoritative) ---
@@ -63,7 +64,7 @@ export const stripeWebhook = onRequest(
         return;
       }
       const existing = await db
-        .collection('orders')
+        .collection(storeCol('orders'))
         .where('payment.stripeSessionId', '==', session.id)
         .limit(1)
         .get();
@@ -92,7 +93,7 @@ export const stripeWebhook = onRequest(
       let pendingRef: FirebaseFirestore.DocumentReference | null = null;
 
       if (metadata.pendingCheckoutId) {
-        pendingRef = db.collection('pendingCheckouts').doc(metadata.pendingCheckoutId);
+        pendingRef = db.collection(storeCol('pendingCheckouts')).doc(metadata.pendingCheckoutId);
         const pendingSnap = await pendingRef.get();
         if (!pendingSnap.exists) {
           console.error(
@@ -170,10 +171,10 @@ export const stripeWebhook = onRequest(
       const cardDetails = charge?.payment_method_details?.card;
 
       const orderId = `H${Date.now()}`;
-      const orderRef = db.collection('orders').doc(orderId);
-      const cartRef = db.collection('carts').doc(userId);
+      const orderRef = db.collection(storeCol('orders')).doc(orderId);
+      const cartRef = db.collection(storeCol('carts')).doc(userId);
       const productRefs = [...new Set(items.map((i) => i.productId))].map((id) =>
-        db.collection('products').doc(id),
+        db.collection(storeCol('products')).doc(id),
       );
 
       const outcome = await db.runTransaction(async (tx) => {
@@ -233,7 +234,7 @@ export const stripeWebhook = onRequest(
             continue;
           }
           const stockField = item.selectedSize ? `stock.${item.selectedSize}` : 'stock._default';
-          tx.update(db.collection('products').doc(item.productId), {
+          tx.update(db.collection(storeCol('products')).doc(item.productId), {
             [stockField]: FieldValue.increment(-item.quantity),
             updatedAt: FieldValue.serverTimestamp(),
           });

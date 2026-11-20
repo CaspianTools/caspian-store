@@ -2,6 +2,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 /**
  * Scheduled publish / unpublish for the page builder (v9.5). Every 5 minutes it
@@ -32,7 +33,7 @@ export const runScheduledPublish = onSchedule(
     const db = getFirestore();
     const now = Timestamp.now();
 
-    const duePublish = await db.collection('pageLayoutSchedules').where('publishAt', '<=', now).get();
+    const duePublish = await db.collection(storeCol('pageLayoutSchedules')).where('publishAt', '<=', now).get();
     for (const doc of duePublish.docs) {
       const pageId = (doc.data().pageId as string) || doc.id;
       try {
@@ -45,7 +46,7 @@ export const runScheduledPublish = onSchedule(
       }
     }
 
-    const dueUnpublish = await db.collection('pageLayoutSchedules').where('unpublishAt', '<=', now).get();
+    const dueUnpublish = await db.collection(storeCol('pageLayoutSchedules')).where('unpublishAt', '<=', now).get();
     for (const doc of dueUnpublish.docs) {
       const pageId = (doc.data().pageId as string) || doc.id;
       try {
@@ -63,12 +64,12 @@ export const runScheduledPublish = onSchedule(
 const MAX_REVISIONS = 30;
 
 async function publishFromDraft(db: FirebaseFirestore.Firestore, pageId: string): Promise<void> {
-  const draftRef = db.collection('pageLayoutDrafts').doc(pageId);
+  const draftRef = db.collection(storeCol('pageLayoutDrafts')).doc(pageId);
   const draftSnap = await draftRef.get();
   if (!draftSnap.exists) return; // nothing staged to publish
   const blocks = Array.isArray(draftSnap.data()?.blocks) ? draftSnap.data()!.blocks : [];
 
-  const pubRef = db.collection('pageLayouts').doc(pageId);
+  const pubRef = db.collection(storeCol('pageLayouts')).doc(pageId);
   const now = Timestamp.now();
   const nextVersion = await db.runTransaction(async (tx) => {
     const pubSnap = await tx.get(pubRef);
@@ -87,7 +88,7 @@ async function publishFromDraft(db: FirebaseFirestore.Firestore, pageId: string)
   });
 
   // For a custom page, publishing also opens its route.
-  const pageRef = db.collection('builderPages').doc(pageId);
+  const pageRef = db.collection(storeCol('builderPages')).doc(pageId);
   const pageSnap = await pageRef.get();
   if (pageSnap.exists && pageSnap.data()?.status !== 'published') {
     await pageRef.update({ status: 'published', updatedAt: now });
@@ -97,7 +98,7 @@ async function publishFromDraft(db: FirebaseFirestore.Firestore, pageId: string)
 }
 
 async function unpublishPage(db: FirebaseFirestore.Firestore, pageId: string): Promise<void> {
-  const pageRef = db.collection('builderPages').doc(pageId);
+  const pageRef = db.collection(storeCol('builderPages')).doc(pageId);
   const pageSnap = await pageRef.get();
   if (pageSnap.exists) {
     // Custom page: take the route offline (draft) without destroying its layout.
@@ -105,7 +106,7 @@ async function unpublishPage(db: FirebaseFirestore.Firestore, pageId: string): P
     return;
   }
   // Homepage / content page: delete the published layout → reverts to the seed.
-  await db.collection('pageLayouts').doc(pageId).delete().catch(() => {});
+  await db.collection(storeCol('pageLayouts')).doc(pageId).delete().catch(() => {});
 }
 
 async function pruneRevisions(
@@ -116,7 +117,7 @@ async function pruneRevisions(
   const cutoff = latestVersion - MAX_REVISIONS;
   if (cutoff < 1) return;
   const snap = await db
-    .collection('pageLayouts')
+    .collection(storeCol('pageLayouts'))
     .doc(pageId)
     .collection('revisions')
     .where('version', '<=', cutoff)

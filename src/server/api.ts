@@ -87,6 +87,13 @@ export interface CaspianHandleApiOptions {
    * refused. v15.4.0.
    */
   embedded?: boolean;
+  /**
+   * Collection prefix of an embedded store — the provider's
+   * `embedded.collectionPrefix` (default `store_` there). Applied by setting
+   * `CASPIAN_COLLECTION_PREFIX`, which the shared function code reads. When
+   * `embedded` is set and this is omitted, `store_` is used. v15.4.0.
+   */
+  collectionPrefix?: string;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -267,6 +274,9 @@ function subPath(req: Request, basePath: string): string {
 export async function caspianHandleApi(req: Request, options: CaspianHandleApiOptions = {}): Promise<Response> {
   const path = subPath(req, options.basePath ?? '/api/caspian-store');
   if (options.stripe) registerStripe(options.stripe);
+  if (options.embedded || options.collectionPrefix !== undefined) {
+    process.env.CASPIAN_COLLECTION_PREFIX = options.collectionPrefix ?? 'store_';
+  }
   try {
     // Every route needs the Admin app, including callables with no signed-in
     // caller (guest order lookup), which never reach verifyCaller's init.

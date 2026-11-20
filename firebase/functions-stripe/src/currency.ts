@@ -1,4 +1,5 @@
 import { logger } from 'firebase-functions';
+import { storeCol } from './store-names';
 
 /**
  * Presentment currencies Stripe accepts on Checkout Sessions and coupons
@@ -38,8 +39,8 @@ const THREE_DECIMAL = new Set(['bhd', 'jod', 'kwd', 'omr', 'tnd']);
  */
 export async function resolveStoreCurrency(db: FirebaseFirestore.Firestore): Promise<string> {
   const [siteSnap, scriptSnap] = await Promise.all([
-    db.collection('settings').doc('site').get(),
-    db.collection('scriptSettings').doc('site').get(),
+    db.collection(storeCol('settings')).doc('site').get(),
+    db.collection(storeCol('scriptSettings')).doc('site').get(),
   ]);
   const candidates = [siteSnap.data()?.currency, scriptSnap.data()?.defaultCurrency];
   for (const raw of candidates) {

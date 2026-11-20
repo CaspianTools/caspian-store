@@ -25,7 +25,12 @@ import {
   sendPasswordResetEmail,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, Timestamp } from 'firebase/firestore';
+import {
+  getDoc,
+  setDoc,
+  Timestamp,
+} from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { CaspianFirebase } from '../firebase/client';
 import type { UserProfile } from '../types';
 import { logError, reportServiceError } from '../services/error-log-service';

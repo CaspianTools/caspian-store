@@ -21,15 +21,14 @@
 
 import {
   Timestamp,
-  collection,
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   serverTimestamp,
   setDoc,
   type Firestore,
 } from 'firebase/firestore';
+import { collection, doc } from '../firebase/store-paths';
 import type { FontTokens } from '../types';
 import type {
   ApplyTemplateMode,

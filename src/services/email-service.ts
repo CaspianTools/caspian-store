@@ -1,5 +1,4 @@
 import {
-  doc,
   getDoc,
   getDocs,
   setDoc,
@@ -8,6 +7,7 @@ import {
   type DocumentSnapshot,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { httpsCallable, type Functions } from 'firebase/functions';
 import { caspianCollections } from '../firebase/collections';
 import {

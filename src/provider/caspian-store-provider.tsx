@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'r
 import type { FirebaseApp, FirebaseOptions } from 'firebase/app';
 import { caspianFirebaseFromApp, initCaspianFirebase, type CaspianFirebase } from '../firebase/client';
 import { caspianCollections, type CaspianCollections } from '../firebase/collections';
+import { registerStorePrefix } from '../firebase/store-paths';
 import { readFirebaseConfigFromEnv } from '../firebase/env-config';
 import {
   DefaultCaspianLink,
@@ -40,6 +41,8 @@ import { registerCaspianServerApi } from '../services/caspian-callable';
  *   granted by the host (see `setStoreAdminClaim` in the `./server` entry). The
  *   `role` field on the store's user profile no longer makes anyone admin, and
  *   the first-user / claim-admin bootstrap is not offered.
+ * - Every collection and Storage path the store owns is prefixed
+ *   (`collectionPrefix`, default `store_`).
  * - App-wide side effects are off: no Firebase config `<script>`, no global
  *   error capture, no theme variables or web fonts written onto the document.
  */
@@ -48,7 +51,17 @@ export interface CaspianEmbedOptions {
   firebaseApp: FirebaseApp;
   /** Cloud Functions region for the store's callables. Default `us-central1`. */
   functionsRegion?: string;
+  /**
+   * Prefix for every top-level Firestore collection and Storage path the
+   * store owns, so its data never mixes with the host's. Default `store_`
+   * (`store_products`, `store_orders`, `store_users`, …). Set the same value
+   * as `collectionPrefix` on `caspianHandleApi` / `CASPIAN_COLLECTION_PREFIX`
+   * for Cloud Functions, and generate the rules with the same prefix.
+   */
+  collectionPrefix?: string;
 }
+
+export const DEFAULT_EMBED_COLLECTION_PREFIX = 'store_';
 
 /** The custom claim that makes a user a store admin in embedded mode. */
 export const STORE_ADMIN_CLAIM = 'storeAdmin';
@@ -208,6 +221,11 @@ export function CaspianStoreProvider({
     }
     if (embedded) {
       const firebase = caspianFirebaseFromApp(embedded.firebaseApp, embedded.functionsRegion);
+      registerStorePrefix(
+        firebase.db,
+        firebase.storage,
+        embedded.collectionPrefix ?? DEFAULT_EMBED_COLLECTION_PREFIX,
+      );
       registerCaspianServerApi(firebase.app.name, serverApi);
       return {
         firebase,

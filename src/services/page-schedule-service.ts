@@ -1,4 +1,10 @@
-import { doc, getDoc, setDoc, Timestamp, type Firestore } from 'firebase/firestore';
+import {
+  getDoc,
+  setDoc,
+  Timestamp,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 
 /**
  * Publish-schedule control docs (`pageLayoutSchedules/{pageId}`, admin-only,

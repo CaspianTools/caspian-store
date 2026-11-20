@@ -1,5 +1,4 @@
 import {
-  doc,
   getDoc,
   getDocs,
   limit as firestoreLimit,
@@ -10,6 +9,7 @@ import {
   where,
   type Firestore,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { Order, OrderStatus } from '../types';
 

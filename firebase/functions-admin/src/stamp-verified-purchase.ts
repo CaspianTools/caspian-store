@@ -2,6 +2,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getFirestore } from 'firebase-admin/firestore';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 /** Mirrors `PURCHASED_STATUSES` in src/services/order-service.ts. */
 const PURCHASED_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
@@ -14,7 +15,7 @@ const PURCHASED_STATUSES = ['paid', 'processing', 'shipped', 'delivered'];
  * the single writer of the "verified" state. The moderation `status` is
  * untouched; the admin still approves the review.
  */
-export const stampVerifiedPurchase = onDocumentCreated('reviews/{id}', async (event) => {
+export const stampVerifiedPurchase = onDocumentCreated(storeCol('reviews') + '/{id}', async (event) => {
   const snap = event.data;
   if (!snap) return;
   const review = snap.data() as { userId?: string; productId?: string; isVerifiedPurchase?: boolean };
@@ -23,7 +24,7 @@ export const stampVerifiedPurchase = onDocumentCreated('reviews/{id}', async (ev
 
   try {
     const ordersSnap = await getFirestore()
-      .collection('orders')
+      .collection(storeCol('orders'))
       .where('userId', '==', review.userId)
       .where('status', 'in', PURCHASED_STATUSES)
       .get();

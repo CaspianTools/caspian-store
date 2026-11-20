@@ -1,7 +1,6 @@
 import {
   addDoc,
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   query,
@@ -16,6 +15,7 @@ import {
   type QueryDocumentSnapshot,
   type DocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { InventorySettings, Product } from '../types';
 import { isProductOutOfStock } from '../utils/inventory';

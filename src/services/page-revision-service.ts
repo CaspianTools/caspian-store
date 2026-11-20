@@ -1,4 +1,11 @@
-import { doc, getDoc, getDocs, orderBy, query, type Firestore } from 'firebase/firestore';
+import {
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  type Firestore,
+} from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import type { PageBlock, PageRevisionMeta } from '../types';
 import { pageLayoutRevisions } from '../firebase/collections';
 

@@ -8,7 +8,11 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
 } from 'firebase/auth';
-import { Timestamp, doc, setDoc } from 'firebase/firestore';
+import {
+  Timestamp,
+  setDoc,
+} from 'firebase/firestore';
+import { doc } from '../../../firebase/store-paths';
 import { useT } from '../../../i18n';
 import { useCaspianFirebase } from '../../../provider/caspian-store-provider';
 import { SetupButton, SetupField } from '../setup-ui';

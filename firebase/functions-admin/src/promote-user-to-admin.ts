@@ -2,6 +2,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { storeCol } from './store-names';
 
 /**
  * Admin-only callable: promotes another user to `role: 'admin'`.
@@ -40,12 +41,12 @@ export const promoteUserToAdmin = onCall({ cors: true }, async (request) => {
 
   const db = getFirestore();
 
-  const callerSnap = await db.collection('users').doc(callerUid).get();
+  const callerSnap = await db.collection(storeCol('users')).doc(callerUid).get();
   if (!callerSnap.exists || callerSnap.data()?.role !== 'admin') {
     throw new HttpsError('permission-denied', 'Only admins can promote users.');
   }
 
-  const targetRef = db.collection('users').doc(targetUid);
+  const targetRef = db.collection(storeCol('users')).doc(targetUid);
   const targetSnap = await targetRef.get();
   if (!targetSnap.exists) {
     throw new HttpsError('not-found', 'Target user profile does not exist.');

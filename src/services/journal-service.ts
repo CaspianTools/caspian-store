@@ -1,7 +1,6 @@
 import {
   addDoc,
   deleteDoc,
-  doc,
   getDoc,
   getDocs,
   orderBy,
@@ -13,6 +12,7 @@ import {
   type QueryDocumentSnapshot,
   type DocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { JournalArticle } from '../types';
 import { stripUndefined } from '../utils/strip-undefined';

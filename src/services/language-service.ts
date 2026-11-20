@@ -1,6 +1,5 @@
 import {
   deleteDoc,
-  doc,
   getDocs,
   orderBy,
   query,
@@ -11,6 +10,7 @@ import {
   type QueryDocumentSnapshot,
   type WriteBatch,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { LanguageDoc } from '../types';
 import { stripUndefined } from '../utils/strip-undefined';

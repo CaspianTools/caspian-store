@@ -4,6 +4,7 @@ import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { reportFunctionError } from './error-report';
+import { storeCol } from './store-names';
 
 /**
  * Account-linking for guest checkout (WooCommerce-parity).
@@ -45,7 +46,7 @@ import { reportFunctionError } from './error-report';
 async function linkGuestOrdersTo(uid: string, email: string): Promise<number> {
   const db = getFirestore();
   const ordersSnap = await db
-    .collection('orders')
+    .collection(storeCol('orders'))
     .where('userEmail', '==', email)
     .where('isGuest', '==', true)
     .limit(450)
@@ -67,7 +68,7 @@ async function linkGuestOrdersTo(uid: string, email: string): Promise<number> {
 }
 
 export const linkGuestOrdersOnUserCreate = onDocumentCreated(
-  'users/{uid}',
+  storeCol('users') + '/{uid}',
   async (event) => {
     const snap = event.data;
     if (!snap) return;

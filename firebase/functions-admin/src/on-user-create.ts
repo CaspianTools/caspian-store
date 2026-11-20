@@ -2,6 +2,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
+import { storeCol } from './store-names';
 
 /**
  * Auto-promote the first-ever user to admin.
@@ -29,14 +30,14 @@ import { getFirestore } from 'firebase-admin/firestore';
  * win the role. Mitigation is to use path 1 — the wizard writes a pending
  * entry first, locking the eventual admin to a specific email.
  */
-export const onUserCreate = onDocumentCreated('users/{uid}', async (event) => {
+export const onUserCreate = onDocumentCreated(storeCol('users') + '/{uid}', async (event) => {
   const snap = event.data;
   if (!snap) return;
 
   const uid = event.params.uid;
   const db = getFirestore();
   const existingAdmins = await db
-    .collection('users')
+    .collection(storeCol('users'))
     .where('role', '==', 'admin')
     .limit(1)
     .get();
@@ -51,7 +52,7 @@ export const onUserCreate = onDocumentCreated('users/{uid}', async (event) => {
 
   // Path 1: email allowlist. If any pending entry exists, the wizard has
   // designated who the first admin will be — only that email is allowed.
-  const pendingSnap = await db.collection('pendingSuperAdmin').limit(1).get();
+  const pendingSnap = await db.collection(storeCol('pendingSuperAdmin')).limit(1).get();
   if (!pendingSnap.empty) {
     if (!userEmail) {
       logger.info(
@@ -60,7 +61,7 @@ export const onUserCreate = onDocumentCreated('users/{uid}', async (event) => {
       return;
     }
     const matchSnap = await db
-      .collection('pendingSuperAdmin')
+      .collection(storeCol('pendingSuperAdmin'))
       .doc(userEmail)
       .get();
     if (!matchSnap.exists) {

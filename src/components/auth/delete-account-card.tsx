@@ -8,7 +8,10 @@ import {
   reauthenticateWithCredential,
   reauthenticateWithPopup,
 } from 'firebase/auth';
-import { deleteDoc, doc } from 'firebase/firestore';
+import {
+  deleteDoc,
+} from 'firebase/firestore';
+import { doc } from '../../firebase/store-paths';
 import { useAuth } from '../../context/auth-context';
 import { caspianCollections } from '../../firebase/collections';
 import { useCaspianFirebase, useCaspianNavigation } from '../../provider/caspian-store-provider';

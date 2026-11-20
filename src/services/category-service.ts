@@ -1,6 +1,5 @@
 import {
   addDoc,
-  doc,
   getDocs,
   query,
   orderBy,
@@ -12,6 +11,7 @@ import {
   type Firestore,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
+import { doc } from '../firebase/store-paths';
 import { caspianCollections } from '../firebase/collections';
 import type { ProductCategoryDoc } from '../types';
 import { stripUndefined } from '../utils/strip-undefined';
