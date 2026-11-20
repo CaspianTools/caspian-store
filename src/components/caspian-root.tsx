@@ -5,6 +5,7 @@ import {
   useCaspianBasePath,
   useCaspianNavigation,
   useCaspianStandalone,
+  useCaspianStore,
 } from '../provider/caspian-store-provider';
 import { getLocalePrefix, stripLocalePrefix } from '../utils/strip-locale-prefix';
 
@@ -70,9 +71,15 @@ export interface CaspianRootProps {
   setupFinishHref?: string;
   /** Override the admin shell's header slot. Default: `<AdminProfileMenu />`. */
   adminHeaderRight?: ReactNode;
-  /** Pass-through to `<SiteHeader>` inside the storefront shell. Set `null` to hide. */
+  /**
+   * Pass-through to `<SiteHeader>` inside the storefront shell. Set `null` to
+   * hide. Embedded stores (`embedded` on the provider) leave it out unless you
+   * pass it — the store sits in the host page's body, under the host's own
+   * header; pass `{}` for the store's header anyway (e.g. a store on its own
+   * subdomain that shares a host's Firebase).
+   */
   header?: SiteHeaderProps | null;
-  /** Pass-through to `<SiteFooter>` inside the storefront shell. Set `null` to hide. */
+  /** Same as `header`, for `<SiteFooter>`. Embedded stores leave it out unless passed. */
   footer?: SiteFooterProps | null;
   /**
    * Options for the account pages (`/account`, `/account/downloads`), e.g.
@@ -111,6 +118,7 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
   const path = stripLocalePrefix(nav.pathname) || '/';
   const posOnly = Boolean(settings.features?.posOnly);
   const standalone = useCaspianStandalone();
+  const { embedded } = useCaspianStore();
 
   // Admin tree — AdminShell renders its own chrome. LayoutShell already
   // auto-bypasses its header/footer for `/admin/**`, so we don't wrap
@@ -171,8 +179,8 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
 
   return (
     <LayoutShell
-      header={header}
-      footer={footer}
+      header={header === undefined && embedded ? null : header}
+      footer={footer === undefined && embedded ? null : footer}
       // Pages pad themselves inside their own containers; a 100px band above
       // every page made the header look detached from the content.
       contentPaddingY={path === '/' ? 0 : 8}

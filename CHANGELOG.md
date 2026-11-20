@@ -25,6 +25,10 @@ Found by the first embedded store (caspiantools.com/store) in its end-to-end tes
 - `CaspianRoot` `account` prop: options passed to the account pages (`/account`, `/account/downloads`).
 - `AccountPage` `hideSignOut`: hides the page's own Sign out button, for a host whose header already signs out.
 
+### Changed
+
+- **Embedded stores leave out the store's header and footer by default.** In embedded mode the store renders in the host page's body, under the host's own header. Pass `header` / `footer` to `CaspianRoot` to show them anyway, for example on a subdomain store with its own look. Standalone stores are unchanged.
+
 ### Fixed
 
 - **Embedded admin access applies at once.** When the signed-in user is not a store admin, `AdminGuard` now refreshes their ID token once before showing "no access". A `storeAdmin` claim granted after sign-in therefore works without signing out and in again.
