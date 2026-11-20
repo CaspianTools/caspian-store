@@ -16,6 +16,33 @@ Do not omit the heading, rename it, or fold it into `### Notes`. This is how
 customers tell at a glance whether an upgrade needs attention.
 -->
 
+## v15.4.0 — Embedded mode, digital products, base path, payment plugin registry
+
+The store can now run inside another app: the host's Firebase project, sign-in,
+admin console and design stay in charge, and the store keeps its data apart.
+Stores can also sell downloadable products.
+
+### Added
+
+- **Embedded mode** (`embedded` prop): reuses the host's Firebase app and signed-in user; store admin is the `storeAdmin` custom claim (`setStoreAdminClaim` in `./server`, `STORE_ADMIN_CLAIM`); collections and Storage paths are prefixed (`collectionPrefix`, default `store_`); no config script, error capture, theme injector or font loader; `embedded.css` scopes page-wide rules to `.caspian-store`. `caspianHandleApi` takes `embedded` and `collectionPrefix`, and refuses setup, self-update and role routes when embedded.
+- **Embedded rules:** `firebase/embedded/build-embedded-rules.mjs` writes prefixed rules blocks into a host's rules files, with admin from the claim only and an optional `--auth` condition. Covered by `firebase/embedded-rules.test.mjs`.
+- **`basePath`** prop: mount the store under a sub-path such as `/store`; links, navigation and default Stripe return URLs follow it.
+- **Digital products:** product type, private file uploads, download limit; checkout without an address for download-only carts; the Stripe webhook records `downloads` on the order; `getDownloadUrl` returns 10-minute signed links and counts downloads in `orderDownloads`; `<OrderDownloads>`, an account Downloads page (`/account/downloads`) and downloads on the admin order page.
+- **`registerPaymentPlugin`** / `listPaymentPlugins`: add payment providers beyond the built-ins.
+- Firebase 13 accepted as a peer dependency.
+
+### Security
+
+- Clients can no longer create orders that carry `downloads`; `orderDownloads` and the `downloads/` Storage folder are closed to non-admins.
+
+### Consumer action required on upgrade
+
+Only for stores that want digital products; nothing changes for existing stores otherwise.
+
+1. Redeploy the rules: `npm run firebase:sync`, then `firebase deploy --only firestore:rules,storage`.
+2. Redeploy the admin functions for `getDownloadUrl`: `firebase deploy --only functions:caspian-admin,functions:caspian-stripe`.
+3. Give the functions' service account the *Service Account Token Creator* role on itself so download links can be signed.
+
 ## v15.3.0 — Product editor checks and colour editor, order details page, related products, locale-prefixed URLs
 
 The second round of the hadiyyam gap analysis: features the hadiyyam shop had

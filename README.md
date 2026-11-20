@@ -18,7 +18,7 @@ npm run dev                  # http://localhost:3000
 ### Manual install (v7.0.0+ — one route file owns every page)
 
 ```bash
-npm install github:CaspianTools/script-caspian-store#v15.3.0 firebase
+npm install github:CaspianTools/script-caspian-store#v15.4.0 firebase
 ```
 
 Two files are all you ever need. **No per-page route files, ever, for any library version.** New library pages land automatically.
@@ -198,6 +198,34 @@ import {
   caspianCollections,
 } from '@caspian-explorer/script-caspian-store/firebase';
 ```
+
+## Embedded mode (v15.4.0): run the store inside another app
+
+For a host app that already has its own Firebase project, sign-in, admin and
+design. The store shares the host's Firebase app and signed-in user, keeps its
+data apart, and leaves the host page alone.
+
+```tsx
+import { CaspianRoot, CaspianStoreProvider } from '@caspian-explorer/script-caspian-store';
+import '@caspian-explorer/script-caspian-store/embedded.css'; // instead of styles.css
+
+<CaspianStoreProvider
+  embedded={{ firebaseApp: hostFirebaseApp, collectionPrefix: 'store_' }}
+  basePath="/store"                       // store lives at /store/**
+  serverApi="https://app.example.com/api/caspian-store"
+  adapters={hostLinkAndNavigationAdapters}
+>
+  <CaspianRoot />
+</CaspianStoreProvider>
+```
+
+- **Data:** every top-level collection and Storage folder is prefixed (`store_products`, `store_orders`, `store_users`, …).
+- **Admin:** a store admin is a user with the `storeAdmin: true` custom claim. Grant it from the host's own admin with `setStoreAdminClaim(uid, true)` from the `./server` entry. The profile `role`, `claimAdmin` and the first-user bootstrap are not used.
+- **Rules:** keep the store's rules inside your own files. Add `// BEGIN caspian-store` and `// END caspian-store` lines inside `service cloud.firestore { }` and `service firebase.storage { }`, then run `node node_modules/@caspian-explorer/script-caspian-store/firebase/embedded/build-embedded-rules.mjs --prefix store_ --firestore firestore.rules --storage storage.rules`. Add `--auth "<expression>"` to apply your own sign-in conditions.
+- **Server:** mount `caspianHandleApi(req, { embedded: true, collectionPrefix: 'store_', stripe: Stripe })`. Setup, self-update and role routes are refused. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
+- **Look:** the store renders inside `.caspian-store`. Set the `--caspian-*` variables there (`--caspian-primary`, `--caspian-background`, `--caspian-font-family`, `--caspian-radius`, …) from your design tokens.
+- **Payments:** Stripe is built in. Add another provider with `registerPaymentPlugin(plugin)` at start-up.
+- **Digital products:** set a product's type to *Digital download* in the editor and upload its files. After a Stripe payment the order lists them, and buyers download through short-lived signed links (`getDownloadUrl`). The server's service account needs permission to sign URLs (*Service Account Token Creator* on itself).
 
 ## Architecture
 
