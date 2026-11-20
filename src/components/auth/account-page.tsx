@@ -33,6 +33,11 @@ export interface AccountPageProps {
   /** Hide the Downloads section (purchased digital files). */
   hideDownloads?: boolean;
   /**
+   * Hide the page's own Sign out button — for a host that already offers
+   * sign-out in its own header (v15.5.0).
+   */
+  hideSignOut?: boolean;
+  /**
    * Pin the open section instead of reading `?section=`. `<CaspianRoot>`
    * passes `'downloads'` for `/account/downloads` (v15.4.0).
    */
@@ -71,6 +76,7 @@ export function AccountPage({
   hideDeleteAccount,
   hideWishlist,
   hideDownloads,
+  hideSignOut,
   section,
   basePath = '/account',
   className,
@@ -219,9 +225,11 @@ export function AccountPage({
             {t('account.signedInAs', { name: displayedName ?? '' })}
           </p>
         </div>
-        <Button variant="outline" onClick={handleSignOut}>
-          {t('account.signOut')}
-        </Button>
+        {!hideSignOut && (
+          <Button variant="outline" onClick={handleSignOut}>
+            {t('account.signOut')}
+          </Button>
+        )}
       </header>
 
       <div className="caspian-account-grid">

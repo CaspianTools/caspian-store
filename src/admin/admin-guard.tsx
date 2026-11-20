@@ -1,7 +1,7 @@
 'use client';
 
 import { caspianCallable } from '../services/caspian-callable';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '../context/auth-context';
 import {
   useCaspianFirebase,
@@ -26,12 +26,27 @@ export interface AdminGuardProps {
  * Consumers wrap `<AdminShell>` / admin pages in this.
  */
 export function AdminGuard({ children, signInHref = '/login', fallback }: AdminGuardProps) {
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading, refreshProfile } = useAuth();
   const { embedded } = useCaspianStore();
   const Link = useCaspianLink();
   const t = useT();
+  // Embedded: a storeAdmin claim granted after sign-in is not on the cached
+  // ID token yet. Refresh it once before saying "no access", so a new admin
+  // does not have to sign out and in again (v15.5.0).
+  const [claimChecked, setClaimChecked] = useState<string | null>(null);
+  const needsClaimCheck = embedded && !!user && !isAdmin && !loading && claimChecked !== user.uid;
+  useEffect(() => {
+    if (!needsClaimCheck || !user) return;
+    let cancelled = false;
+    void refreshProfile().finally(() => {
+      if (!cancelled) setClaimChecked(user.uid);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsClaimCheck, user, refreshProfile]);
 
-  if (loading) {
+  if (loading || needsClaimCheck) {
     return (
       <div style={{ padding: 40, display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Skeleton style={{ height: 24, width: 200 }} />

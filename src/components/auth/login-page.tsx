@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../../context/auth-context';
 import { useCaspianLink, useCaspianNavigation } from '../../provider/caspian-store-provider';
 import { useT } from '../../i18n/locale-context';
@@ -27,7 +27,7 @@ export function LoginPage({
   subtitle,
   className,
 }: LoginPageProps) {
-  const { signIn, signInWithGoogle } = useAuth();
+  const { user, signIn, signInWithGoogle } = useAuth();
   const nav = useCaspianNavigation();
   const Link = useCaspianLink();
   const { toast } = useToast();
@@ -37,6 +37,15 @@ export function LoginPage({
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Leave as soon as the session exists, not only when the sign-in promise
+  // settles: a Google popup that is slow to report back (or never does, when
+  // the browser loses its opener) otherwise leaves the button on "Signing
+  // in…" although the user is already signed in (v15.5.0).
+  useEffect(() => {
+    if (submitting && user && !user.isAnonymous) nav.push(redirectTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitting, user]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

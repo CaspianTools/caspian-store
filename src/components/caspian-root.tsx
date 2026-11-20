@@ -25,6 +25,7 @@ import {
   LoginPage,
   RegisterPage,
   ForgotPasswordPage,
+  type AccountPageProps,
 } from './auth';
 
 import { JournalListPage, JournalDetailPage } from './journal';
@@ -73,6 +74,11 @@ export interface CaspianRootProps {
   header?: SiteHeaderProps | null;
   /** Pass-through to `<SiteFooter>` inside the storefront shell. Set `null` to hide. */
   footer?: SiteFooterProps | null;
+  /**
+   * Options for the account pages (`/account`, `/account/downloads`), e.g.
+   * `{ hideSignOut: true }` when the host's header already signs out (v15.5.0).
+   */
+  account?: Omit<AccountPageProps, 'section'>;
 }
 
 /**
@@ -95,6 +101,7 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
     adminHeaderRight,
     header,
     footer,
+    account,
   } = props;
 
   const nav = useCaspianNavigation();
@@ -226,10 +233,10 @@ export function CaspianRoot(props: CaspianRootProps = {}): ReactNode {
 
   if (path === '/order-status') return <GuestOrderLookupPage />;
 
-  if (path === '/account') return <AccountPage />;
+  if (path === '/account') return <AccountPage {...account} />;
   // Keyed so moving between /account and /account/downloads remounts the
   // page with the right section instead of keeping the old one open.
-  if (path === '/account/downloads') return <AccountPage key="downloads" section="downloads" />;
+  if (path === '/account/downloads') return <AccountPage key="downloads" {...account} section="downloads" />;
   if (path === '/login' || path === '/auth/login') return <LoginPage />;
   if (path === '/register' || path === '/auth/register') return <RegisterPage />;
   if (path === '/forgot-password' || path === '/auth/forgot-password') return <ForgotPasswordPage />;

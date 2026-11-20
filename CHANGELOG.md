@@ -16,6 +16,24 @@ Do not omit the heading, rename it, or fold it into `### Notes`. This is how
 customers tell at a glance whether an upgrade needs attention.
 -->
 
+## Unreleased — embedded-host fixes (version number assigned when the store work is finished)
+
+Found by the first embedded store (caspiantools.com/store) in its end-to-end test.
+
+### Added
+
+- `CaspianRoot` `account` prop: options passed to the account pages (`/account`, `/account/downloads`).
+- `AccountPage` `hideSignOut`: hides the page's own Sign out button, for a host whose header already signs out.
+
+### Fixed
+
+- **Embedded admin access applies at once.** When the signed-in user is not a store admin, `AdminGuard` now refreshes their ID token once before showing "no access". A `storeAdmin` claim granted after sign-in therefore works without signing out and in again.
+- **Sign-in no longer sticks on "Signing in…".** The login page now moves on as soon as the user is signed in. Before, it waited for the sign-in call to return, and a Google popup that was slow to report back (or never did) left the button spinning.
+
+### No consumer action required
+
+All additions are opt-in, and the fixes need no configuration.
+
 ## v15.4.0 — Embedded mode, digital products, base path, payment plugin registry
 
 The store can now run inside another app: the host's Firebase project, sign-in,
