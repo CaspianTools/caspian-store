@@ -3,8 +3,7 @@
 import { deleteField, type Firestore } from 'firebase/firestore';
 import { SHIPPING_PLUGIN_CATALOG } from '../shipping/catalog';
 import { SHIPPING_PLUGIN_IDS, type ShippingPluginId } from '../shipping/types';
-import { PAYMENT_PLUGIN_CATALOG } from '../payments/catalog';
-import { PAYMENT_PLUGIN_IDS } from '../payments/types';
+import { listPaymentPlugins } from '../payments/catalog';
 import { EMAIL_PLUGIN_CATALOG } from '../email/catalog';
 import { EMAIL_PLUGIN_IDS } from '../email/types';
 import {
@@ -71,18 +70,21 @@ function toCatalogPlugin(
   };
 }
 
-const CATALOG: CatalogPlugin[] = [
-  ...SHIPPING_PLUGIN_IDS.map((id) => toCatalogPlugin('shipping', SHIPPING_PLUGIN_CATALOG[id])),
-  ...PAYMENT_PLUGIN_IDS.map((id) => toCatalogPlugin('payment', PAYMENT_PLUGIN_CATALOG[id])),
-  ...EMAIL_PLUGIN_IDS.map((id) => toCatalogPlugin('email', EMAIL_PLUGIN_CATALOG[id])),
-];
+// Built per call: payment plugins a host registers at start-up must show up.
+function catalog(): CatalogPlugin[] {
+  return [
+    ...SHIPPING_PLUGIN_IDS.map((id) => toCatalogPlugin('shipping', SHIPPING_PLUGIN_CATALOG[id])),
+    ...listPaymentPlugins().map((p) => toCatalogPlugin('payment', p)),
+    ...EMAIL_PLUGIN_IDS.map((id) => toCatalogPlugin('email', EMAIL_PLUGIN_CATALOG[id])),
+  ];
+}
 
 export function listCatalogPlugins(): CatalogPlugin[] {
-  return CATALOG;
+  return catalog();
 }
 
 export function findCatalogPlugin(pluginId: string): CatalogPlugin | null {
-  return CATALOG.find((p) => p.id === pluginId) ?? null;
+  return catalog().find((p) => p.id === pluginId) ?? null;
 }
 
 /** Returns the validation error message, or `null` when the config is valid. */

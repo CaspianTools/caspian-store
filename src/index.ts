@@ -581,6 +581,8 @@ export {
   PAYMENT_PLUGIN_IDS,
   PAYMENT_PLUGIN_CATALOG,
   getPaymentPlugin,
+  listPaymentPlugins,
+  registerPaymentPlugin,
   STRIPE_PLUGIN,
   BACS_PLUGIN,
   CHEQUE_PLUGIN,

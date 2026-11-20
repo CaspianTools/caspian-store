@@ -59,6 +59,33 @@ const GENERATED_BANNER =
   '// Edit firebase/firestore.rules, firebase/storage.rules, or\n' +
   '// firebase/firestore.indexes.json instead, then run `npm run build`.\n';
 
+// Embedded stylesheet (v15.4.0): globals.css with the rules that style the
+// whole page (`body`, every `a`) scoped to the `.caspian-store` wrapper the
+// provider renders in embedded mode, so a host's own typography and links are
+// left alone. Committed, like the other generated files, so the export exists
+// in a GitHub install without a build.
+{
+  const globals = readText(join('src', 'styles', 'globals.css'));
+  const scoped = globals
+    .replace(/^body \{/m, '.caspian-store {')
+    .replace(/^a \{/m, '.caspian-store a {')
+    .replace(/^a:hover \{/m, '.caspian-store a:hover {')
+    .replace(/^a:focus-visible \{/m, '.caspian-store a:focus-visible {');
+  for (const sel of ['body {', 'a {', 'a:hover {', 'a:focus-visible {']) {
+    if (scoped.split('\n').includes(sel)) throw new Error(`embedded.css: unscoped "${sel}" left in globals.css`);
+  }
+  writeIfChanged(
+    join('src', 'styles', 'embedded.css'),
+    `/* Auto-generated from globals.css by tsup.config.ts. Do not edit.\n` +
+      `   For embedded stores: import this INSTEAD of styles.css. Page-wide rules are\n` +
+      `   scoped to .caspian-store; map the store to your design by setting the\n` +
+      `   --caspian-* variables on .caspian-store (see README "Embedded mode"). */\n\n` +
+      scoped +
+      `\n/* Embedded: the store fills its slot in the host layout, not the viewport. */\n` +
+      `.caspian-store .caspian-root,\n.caspian-store .caspian-storefront {\n  min-height: 0;\n}\n`,
+  );
+}
+
 writeIfChanged(
   join('src', 'firebase', 'rules.generated.ts'),
   GENERATED_BANNER +

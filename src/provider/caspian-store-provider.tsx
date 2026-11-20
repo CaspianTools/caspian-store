@@ -46,6 +46,9 @@ import { registerCaspianServerApi } from '../services/caspian-callable';
  *   (`collectionPrefix`, default `store_`).
  * - App-wide side effects are off: no Firebase config `<script>`, no global
  *   error capture, no theme variables or web fonts written onto the document.
+ *   Import `embedded.css` instead of `styles.css`; the store renders inside a
+ *   `.caspian-store` element and takes its look from the `--caspian-*`
+ *   variables the host sets there (map them to the host's design tokens).
  */
 export interface CaspianEmbedOptions {
   /** The host's initialised Firebase app (usually its `[DEFAULT]` app). */
@@ -326,7 +329,8 @@ export function CaspianStoreProvider({
                     <TemplateProvider>
                       {!value.embedded && <ThemeInjector />}
                       {!value.embedded && <FontLoader />}
-                      {children}
+                      {/* Embedded: the scope for embedded.css and the host's --caspian-* mapping. */}
+                      {value.embedded ? <div className="caspian-store">{children}</div> : children}
                     </TemplateProvider>
                   </ScriptSettingsProvider>
                 </WishlistProvider>

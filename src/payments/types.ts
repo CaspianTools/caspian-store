@@ -2,7 +2,11 @@ import type { Auth, User } from 'firebase/auth';
 import type { Functions } from 'firebase/functions';
 import type { CartItem } from '../types';
 
-export type PaymentPluginId = 'stripe' | 'bacs' | 'cheque' | 'cod';
+/**
+ * Built-in ids, plus any id a host registers with `registerPaymentPlugin`
+ * (v15.4.0). The `string & {}` keeps editor completion for the built-ins.
+ */
+export type PaymentPluginId = 'stripe' | 'bacs' | 'cheque' | 'cod' | (string & {});
 
 export const PAYMENT_PLUGIN_IDS: readonly PaymentPluginId[] = [
   'stripe',
