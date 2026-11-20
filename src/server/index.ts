@@ -14,6 +14,7 @@ export {
   caspianHandleSelfUpdate,
   type CaspianHandleSelfUpdateOptions,
 } from './self-update';
+export { setStoreAdminClaim } from './store-admin';
 export {
   caspianHandleApi,
   CASPIAN_SERVER_CALLABLES,

@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
-import type { FirebaseOptions } from 'firebase/app';
-import { initCaspianFirebase, type CaspianFirebase } from '../firebase/client';
+import type { FirebaseApp, FirebaseOptions } from 'firebase/app';
+import { caspianFirebaseFromApp, initCaspianFirebase, type CaspianFirebase } from '../firebase/client';
 import { caspianCollections, type CaspianCollections } from '../firebase/collections';
 import { readFirebaseConfigFromEnv } from '../firebase/env-config';
 import {
@@ -29,7 +29,33 @@ import { logError } from '../services/error-log-service';
 import { getLocalePrefix, stripLocalePrefix, withLocalePrefix } from '../utils/strip-locale-prefix';
 import { registerCaspianServerApi } from '../services/caspian-callable';
 
+/**
+ * Embedded mode: the store lives inside a host app that already has its own
+ * Firebase project, sign-in, admin console and design. Added in v15.4.0.
+ *
+ * What changes when it is set:
+ * - The store reuses `firebaseApp` (and so the host's signed-in user) instead
+ *   of initialising its own app; `firebaseConfig` and `appName` are ignored.
+ * - Store admin is the `storeAdmin: true` custom claim on the user's ID token,
+ *   granted by the host (see `setStoreAdminClaim` in the `./server` entry). The
+ *   `role` field on the store's user profile no longer makes anyone admin, and
+ *   the first-user / claim-admin bootstrap is not offered.
+ * - App-wide side effects are off: no Firebase config `<script>`, no global
+ *   error capture, no theme variables or web fonts written onto the document.
+ */
+export interface CaspianEmbedOptions {
+  /** The host's initialised Firebase app (usually its `[DEFAULT]` app). */
+  firebaseApp: FirebaseApp;
+  /** Cloud Functions region for the store's callables. Default `us-central1`. */
+  functionsRegion?: string;
+}
+
+/** The custom claim that makes a user a store admin in embedded mode. */
+export const STORE_ADMIN_CLAIM = 'storeAdmin';
+
 export interface CaspianStoreProviderProps {
+  /** Run inside a host app. See {@link CaspianEmbedOptions}. */
+  embedded?: CaspianEmbedOptions;
   /**
    * Firebase project config (apiKey, authDomain, projectId, etc.).
    *
@@ -108,6 +134,8 @@ export interface CaspianStoreContextValue {
   standalone: boolean;
   /** `serverApi` prop, or null when the store runs on Cloud Functions. */
   serverApi: string | null;
+  /** True when mounted with the `embedded` prop. */
+  embedded: boolean;
 }
 
 const CaspianStoreContext = createContext<CaspianStoreContextValue | null>(null);
@@ -147,6 +175,7 @@ function resolveFirebaseConfig(passed: FirebaseOptions): FirebaseOptions {
 }
 
 export function CaspianStoreProvider({
+  embedded,
   firebaseConfig,
   standalone = false,
   scriptSettings,
@@ -168,7 +197,26 @@ export function CaspianStoreProvider({
     };
     const resolvedAdapters = localeInUrl ? withLocaleInUrl(baseAdapters) : baseAdapters;
     if (standalone) {
-      return { firebase: null, collections: null, adapters: resolvedAdapters, standalone: true, serverApi: null };
+      return {
+        firebase: null,
+        collections: null,
+        adapters: resolvedAdapters,
+        standalone: true,
+        serverApi: null,
+        embedded: false,
+      };
+    }
+    if (embedded) {
+      const firebase = caspianFirebaseFromApp(embedded.firebaseApp, embedded.functionsRegion);
+      registerCaspianServerApi(firebase.app.name, serverApi);
+      return {
+        firebase,
+        collections: caspianCollections(firebase.db),
+        adapters: resolvedAdapters,
+        standalone: false,
+        serverApi: serverApi ?? null,
+        embedded: true,
+      };
     }
     const resolvedConfig = resolveFirebaseConfig(firebaseConfig ?? {});
     const firebase = initCaspianFirebase({
@@ -178,7 +226,14 @@ export function CaspianStoreProvider({
     });
     const collections = caspianCollections(firebase.db);
     registerCaspianServerApi(firebase.app.name, serverApi);
-    return { firebase, collections, adapters: resolvedAdapters, standalone: false, serverApi: serverApi ?? null };
+    return {
+      firebase,
+      collections,
+      adapters: resolvedAdapters,
+      standalone: false,
+      serverApi: serverApi ?? null,
+      embedded: false,
+    };
     // Intentionally stable per mount; consumers should not swap these at runtime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -209,7 +264,8 @@ export function CaspianStoreProvider({
   // passes a partial config. The script runs at HTML parse time, before
   // React hydration, so the client useMemo above can read it via
   // readSsrConfigFromWindow().
-  const ssrConfigJson = value.firebase ? JSON.stringify(value.firebase.app.options) : null;
+  // The host owns its config in embedded mode.
+  const ssrConfigJson = value.firebase && !value.embedded ? JSON.stringify(value.firebase.app.options) : null;
 
   return (
     <CaspianStoreContext.Provider value={value}>
@@ -222,17 +278,19 @@ export function CaspianStoreProvider({
         />
       )}
       <ErrorBoundary db={value.firebase?.db} origin="CaspianStoreProvider">
-        <GlobalErrorCapture db={value.firebase?.db ?? null} projectId={firebaseConfig?.projectId} />
+        {!value.embedded && (
+          <GlobalErrorCapture db={value.firebase?.db ?? null} projectId={firebaseConfig?.projectId} />
+        )}
         <LocationChangeBridge />
         <LocaleProvider locale={locale} messages={messages} messagesByLocale={messagesByLocale}>
           <ToastProvider>
-            <AuthProvider firebase={value.firebase}>
+            <AuthProvider firebase={value.firebase} embedded={value.embedded}>
               <CartProvider db={value.firebase?.db ?? null}>
                 <WishlistProvider db={value.firebase?.db ?? null}>
                   <ScriptSettingsProvider collections={value.collections} seed={settingsSeed}>
                     <TemplateProvider>
-                      <ThemeInjector />
-                      <FontLoader />
+                      {!value.embedded && <ThemeInjector />}
+                      {!value.embedded && <FontLoader />}
                       {children}
                     </TemplateProvider>
                   </ScriptSettingsProvider>

@@ -32,9 +32,18 @@ import { logError, reportServiceError } from '../services/error-log-service';
 import { tryEnsureAdminClaim } from '../services/storage-service';
 import { tryLinkGuestOrders } from '../services/guest-order-link-service';
 
+/** Mirrors `STORE_ADMIN_CLAIM` in the provider (kept here to avoid an import cycle). */
+const STORE_ADMIN_CLAIM = 'storeAdmin';
+
 interface AuthContextValue {
   user: User | null;
   userProfile: UserProfile | null;
+  /**
+   * Whether the signed-in user is a store admin. Standalone stores read
+   * `userProfile.role`; embedded stores read the `storeAdmin` ID-token claim
+   * the host grants. Use this rather than checking `role` yourself. v15.4.0.
+   */
+  isAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
   signUp: (email: string, password: string, displayName: string) => Promise<void>;
@@ -87,6 +96,7 @@ async function fetchOrCreateUserProfile(
 
 export function AuthProvider({
   firebase,
+  embedded = false,
   children,
 }: {
   /**
@@ -96,10 +106,13 @@ export function AuthProvider({
    * cloud sign-in method refuses rather than pretending to work.
    */
   firebase: CaspianFirebase | null;
+  /** Embedded in a host app: admin comes from the `storeAdmin` claim only. */
+  embedded?: boolean;
   children: ReactNode;
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [claimAdmin, setClaimAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   // v8.6.0: pre-emptive admin-claim token refresh, gated to once per uid so
   // we don't loop on consumers whose `caspian-admin` Cloud Functions are
@@ -128,6 +141,19 @@ export function AuthProvider({
     }
     const unsubscribe = onAuthStateChanged(firebase.auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      if (embedded) {
+        let admin = false;
+        if (firebaseUser) {
+          try {
+            const token = await firebaseUser.getIdTokenResult();
+            admin = token.claims[STORE_ADMIN_CLAIM] === true;
+          } catch (error) {
+            reportServiceError(firebase.db, 'auth-context.readAdminClaim', error);
+          }
+        }
+        if (firebase.auth.currentUser?.uid !== firebaseUser?.uid) return;
+        setClaimAdmin(admin);
+      }
       // The profile fetch is async; if auth moves on (guest → registered
       // account, or sign-out) before it resolves, the stale profile must
       // not overwrite the newer one.
@@ -158,6 +184,7 @@ export function AuthProvider({
           // the claim immediately. Bounded to once per uid so a consumer
           // who hasn't deployed the admin Functions doesn't loop.
           if (
+            !embedded &&
             profile.role === 'admin' &&
             refreshedClaimForUid.current !== firebaseUser.uid
           ) {
@@ -191,7 +218,9 @@ export function AuthProvider({
       setLoading(false);
     });
     return unsubscribe;
-  }, [firebase]);
+  }, [firebase, embedded]);
+
+  const isAdmin = embedded ? claimAdmin : userProfile?.role === 'admin';
 
   const signIn = useCallback(
     async (email: string, password: string, rememberMe = true) => {
@@ -276,10 +305,15 @@ export function AuthProvider({
     try {
       const profile = await fetchOrCreateUserProfile(firebase, user);
       setUserProfile(profile);
+      if (embedded) {
+        // Picks up a storeAdmin claim the host granted after sign-in.
+        const token = await user.getIdTokenResult(true);
+        setClaimAdmin(token.claims[STORE_ADMIN_CLAIM] === true);
+      }
     } catch (error) {
       reportServiceError(firebase.db, 'auth-context.refreshProfile', error);
     }
-  }, [firebase, user]);
+  }, [firebase, user, embedded]);
 
   // Memoised so a re-render of the provider (a `loading` flip, a profile
   // refresh) does not hand every `useAuth()` consumer a new object.
@@ -287,6 +321,7 @@ export function AuthProvider({
     () => ({
       user,
       userProfile,
+      isAdmin,
       loading,
       signIn,
       signUp,
@@ -300,6 +335,7 @@ export function AuthProvider({
     [
       user,
       userProfile,
+      isAdmin,
       loading,
       signIn,
       signUp,

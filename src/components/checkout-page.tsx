@@ -155,6 +155,7 @@ export function CheckoutPage({
   const {
     user,
     userProfile,
+    isAdmin,
     loading: authLoading,
     signIn,
     signInAsGuest,
@@ -447,7 +448,7 @@ export function CheckoutPage({
           {t('checkout.noPaymentConfigured.title')}
         </h1>
         <p style={{ color: '#666', marginTop: 8 }}>{t('checkout.noPaymentConfigured.body')}</p>
-        {userProfile?.role === 'admin' && (
+        {isAdmin && (
           <div style={{ marginTop: 16 }}>
             <Link href="/admin/plugins?filter=payment">{t('checkout.noPaymentConfigured.adminLink')}</Link>
           </div>

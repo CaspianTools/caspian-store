@@ -3,7 +3,12 @@
 import { caspianCallable } from '../services/caspian-callable';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from '../context/auth-context';
-import { useCaspianFirebase, useCaspianLink, useCaspianServerApi } from '../provider/caspian-store-provider';
+import {
+  useCaspianFirebase,
+  useCaspianLink,
+  useCaspianServerApi,
+  useCaspianStore,
+} from '../provider/caspian-store-provider';
 import { callCaspianServer } from '../services/caspian-callable';
 import { useT } from '../i18n/locale-context';
 import { Skeleton } from '../ui/misc';
@@ -21,7 +26,8 @@ export interface AdminGuardProps {
  * Consumers wrap `<AdminShell>` / admin pages in this.
  */
 export function AdminGuard({ children, signInHref = '/login', fallback }: AdminGuardProps) {
-  const { user, userProfile, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuth();
+  const { embedded } = useCaspianStore();
   const Link = useCaspianLink();
   const t = useT();
 
@@ -47,12 +53,26 @@ export function AdminGuard({ children, signInHref = '/login', fallback }: AdminG
     );
   }
 
-  if (userProfile?.role !== 'admin') {
+  if (!isAdmin) {
     if (fallback) return <>{fallback}</>;
+    // Embedded: the host grants store admin; there is nothing to claim here.
+    if (embedded) return <EmbeddedAccessDenied />;
     return <AccessDenied uid={user.uid} />;
   }
 
   return <>{children}</>;
+}
+
+function EmbeddedAccessDenied() {
+  const t = useT();
+  return (
+    <div style={{ padding: 40, textAlign: 'center', maxWidth: 520, margin: '0 auto' }}>
+      <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>{t('admin.guard.deniedTitle')}</h1>
+      <p style={{ color: 'var(--caspian-muted-foreground, #666)', marginTop: 8 }}>
+        {t('admin.guard.deniedEmbedded')}
+      </p>
+    </div>
+  );
 }
 
 type ClaimState =

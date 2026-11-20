@@ -11,6 +11,8 @@ export {
   useCaspianFirebase,
   useCaspianFirebaseOptional,
   useCaspianStandalone,
+  STORE_ADMIN_CLAIM,
+  type CaspianEmbedOptions,
   type CaspianStoreProviderProps,
   type CaspianStoreContextValue,
 } from './provider/caspian-store-provider';

@@ -90,6 +90,21 @@ export function tryInitCaspianFirebase(options: InitFirebaseOptions): CaspianFir
   }
 }
 
+/**
+ * Wrap a Firebase app the host has already initialised. Used by embedded mode:
+ * the store then shares the host's Auth (so the host's signed-in user is the
+ * store's user), Firestore, Storage and Functions instead of starting its own.
+ */
+export function caspianFirebaseFromApp(app: FirebaseApp, functionsRegion = 'us-central1'): CaspianFirebase {
+  return {
+    app,
+    auth: getAuth(app),
+    db: getFirestore(app),
+    storage: getStorage(app),
+    functions: getFunctions(app, functionsRegion),
+  };
+}
+
 /** Fall back to the default Firebase app if the consumer has already initialized it. */
 export function getDefaultCaspianFirebase(functionsRegion = 'us-central1'): CaspianFirebase | null {
   if (getApps().length === 0) return null;

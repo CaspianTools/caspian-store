@@ -1846,6 +1846,7 @@ export const DEFAULT_MESSAGES: MessageDict = {
   'admin.guard.signIn': 'Sign in',
   'admin.guard.deniedTitle': 'Access denied',
   'admin.guard.deniedBody': 'Your account doesn’t have the admin role. Three paths to fix:',
+  'admin.guard.deniedEmbedded': 'Your account isn’t a store admin. Ask an administrator of this site to give you store admin access.',
   'admin.guard.copied': 'Copied',
   'admin.guard.copyUid': 'Copy UID',
   'admin.guard.claiming': 'Claiming…',

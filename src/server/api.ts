@@ -54,6 +54,18 @@ const CALLABLES: Record<string, CallableLoader> = {
     (await import('../../firebase/functions-stripe/src/stripe-session')).getStripeSession as unknown as ShimCallable,
 };
 
+/**
+ * Callables an embedded store may run. The rest manage the profile `role`
+ * (claim, promote, demote, set role) — in embedded mode the host grants store
+ * admin with `setStoreAdminClaim`, so those must not run at all.
+ */
+const EMBEDDED_CALLABLES = new Set([
+  'linkMyGuestOrders',
+  'getGuestOrder',
+  'createStripeCheckoutSession',
+  'getStripeSession',
+]);
+
 /** Callable names the server API answers; the client routes these here when `serverApi` is set. */
 export const CASPIAN_SERVER_CALLABLES = Object.keys(CALLABLES);
 
@@ -68,6 +80,13 @@ export interface CaspianHandleApiOptions {
    * path after it selects the handler.
    */
   basePath?: string;
+  /**
+   * The store is embedded in a host app (`embedded` on the provider). Set it
+   * here too: the setup routes (which would replace the host project's
+   * security rules), self-update and the role-management callables are then
+   * refused. v15.4.0.
+   */
+  embedded?: boolean;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -259,6 +278,11 @@ export async function caspianHandleApi(req: Request, options: CaspianHandleApiOp
         'failed-precondition',
         err instanceof Error ? err.message : 'The server has no Firebase credentials.',
       );
+    }
+    if (options.embedded) {
+      const name = path.startsWith('call/') ? path.slice('call/'.length) : null;
+      const allowed = (name !== null && EMBEDDED_CALLABLES.has(name)) || path === 'stripe/webhook';
+      if (!allowed) throw new HttpsError('not-found', 'Not available on an embedded store.');
     }
     if (path === 'setup/status' && req.method === 'GET') {
       const { bootstrap } = await authorizeSetup(req);

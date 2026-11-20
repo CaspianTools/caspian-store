@@ -1,6 +1,7 @@
 export {
   initCaspianFirebase,
   getDefaultCaspianFirebase,
+  caspianFirebaseFromApp,
   type CaspianFirebase,
   type InitFirebaseOptions,
 } from './client';
