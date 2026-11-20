@@ -58,7 +58,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rimraf dist",
     "prepare": "tsup",
-    "test": "cd firebase && firebase emulators:exec --only firestore,storage \"cd .. && node --test firebase/rules.test.mjs\""
+    "test": "cd firebase && firebase emulators:exec --only firestore,storage \"cd .. && node --test --test-concurrency=1 firebase/rules.test.mjs firebase/embedded-rules.test.mjs\""
   },
   "peerDependencies": {
     "firebase": "^12.0.0 || ^11.0.0 || ^10.0.0",

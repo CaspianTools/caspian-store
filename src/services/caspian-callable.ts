@@ -14,6 +14,7 @@ const SERVER_CALLABLES = new Set([
   'demoteAdminToCustomer',
   'linkMyGuestOrders',
   'getGuestOrder',
+  'getDownloadUrl',
   'createStripeCheckoutSession',
   'getStripeSession',
 ]);

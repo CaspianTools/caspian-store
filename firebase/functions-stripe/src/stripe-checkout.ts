@@ -58,6 +58,18 @@ export interface PendingOrderItem {
   selectedSize: string | null;
   selectedColor: string | null;
   imageUrl: string;
+  /** v15.4.0: the product is delivered as files — no stock, no shipping. */
+  digital?: boolean;
+}
+
+/** A file the buyer receives; copied onto the order as `downloads[]`. */
+export interface PendingDownload {
+  productId: string;
+  fileId: string;
+  name: string;
+  size: number;
+  /** 0 = unlimited. */
+  downloadLimit: number;
 }
 
 /**
@@ -80,6 +92,8 @@ export interface PendingCheckout {
   promoCode: string | null;
   currency: string;
   locale: string;
+  /** v15.4.0: files snapshotted at checkout for the digital items. */
+  downloads?: PendingDownload[];
 }
 
 function computeDiscount(subtotal: number, promo: FirebaseFirestore.DocumentData): number {
@@ -146,6 +160,7 @@ export const createStripeCheckoutSession = onCall(
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
     const orderItems: PendingOrderItem[] = [];
     const shippingLines: ShippingCartLine[] = [];
+    const downloads: PendingDownload[] = [];
     let subtotal = 0;
 
     for (const item of data.items) {
@@ -161,9 +176,32 @@ export const createStripeCheckoutSession = onCall(
         throw new HttpsError('failed-precondition', `${product.name} is no longer available.`);
       }
 
+      const digital = product.kind === 'digital';
+      if (digital) {
+        // One licence per order line; a second copy of a file is meaningless.
+        if (item.quantity !== 1) {
+          throw new HttpsError('invalid-argument', `${product.name} is a download; buy one copy.`);
+        }
+        const files = Array.isArray(product.files) ? product.files : [];
+        if (files.length === 0) {
+          throw new HttpsError('failed-precondition', `${product.name} has no files to deliver yet.`);
+        }
+        const limit = Number.isInteger(product.downloadLimit) && product.downloadLimit > 0 ? product.downloadLimit : 0;
+        for (const f of files as Array<{ id?: unknown; name?: unknown; size?: unknown }>) {
+          if (typeof f.id !== 'string') continue;
+          downloads.push({
+            productId: item.productId,
+            fileId: f.id,
+            name: typeof f.name === 'string' ? f.name : f.id,
+            size: typeof f.size === 'number' ? f.size : 0,
+            downloadLimit: limit,
+          });
+        }
+      }
+
       const stockKey = item.selectedSize || '_default';
       const availableStock =
-        typeof product.stock?.[stockKey] === 'number' ? product.stock[stockKey] : null;
+        !digital && typeof product.stock?.[stockKey] === 'number' ? product.stock[stockKey] : null;
       if (availableStock !== null && availableStock < item.quantity) {
         throw new HttpsError(
           'failed-precondition',
@@ -174,10 +212,12 @@ export const createStripeCheckoutSession = onCall(
       }
 
       subtotal += product.price * item.quantity;
-      shippingLines.push({
-        quantity: item.quantity,
-        weightKg: typeof product.weightKg === 'number' ? product.weightKg : null,
-      });
+      if (!digital) {
+        shippingLines.push({
+          quantity: item.quantity,
+          weightKg: typeof product.weightKg === 'number' ? product.weightKg : null,
+        });
+      }
 
       const variant = item.selectedColor
         ? (product.colorVariants as Array<{ name: string; imageUrl: string }> | undefined)?.find(
@@ -213,17 +253,22 @@ export const createStripeCheckoutSession = onCall(
         selectedSize: item.selectedSize ?? null,
         selectedColor: item.selectedColor ?? null,
         imageUrl,
+        ...(digital ? { digital: true } : {}),
       });
     }
 
     // --- Shipping: verified against the store's offered rates, then a line item ---
-    const shippingCost = await assertShippingCost(
-      db,
-      data.shippingCost,
-      data.shippingInfo?.shippingMethod,
-      subtotal,
-      shippingLines,
-    );
+    // A cart of downloads ships nothing, whatever rates the store offers.
+    const shippingCost =
+      shippingLines.length === 0
+        ? 0
+        : await assertShippingCost(
+            db,
+            data.shippingCost,
+            data.shippingInfo?.shippingMethod,
+            subtotal,
+            shippingLines,
+          );
     if (shippingCost > 0) {
       lineItems.push({
         price_data: {
@@ -290,6 +335,7 @@ export const createStripeCheckoutSession = onCall(
       promoCode: appliedPromoCode,
       currency,
       locale: data.locale ?? '',
+      ...(downloads.length > 0 ? { downloads } : {}),
     };
     const pendingRef = db.collection(storeCol('pendingCheckouts')).doc();
     await pendingRef.set({ ...pending, createdAt: FieldValue.serverTimestamp() });

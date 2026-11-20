@@ -86,5 +86,15 @@ service firebase.storage {
                    && request.resource.contentType.matches('image/(jpeg|png|webp|gif)');
       allow delete: if isAdmin();
     }
+
+    // Files sold as digital products (v15.4.0). Private: buyers never read
+    // this folder directly — the getDownloadUrl callable checks the order and
+    // returns a short-lived signed link. Admins upload any file type up to
+    // 500 MB from the product editor.
+    match /downloads/{path=**} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && request.resource.size < 500 * 1024 * 1024;
+      allow delete: if isAdmin();
+    }
   }
 }

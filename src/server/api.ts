@@ -23,7 +23,7 @@ import type { CallableRequest, ShimCallable, ShimOnRequest, ShimResponse } from 
 import { HttpsError } from './functions-shim/https';
 import { getCaspianAdminApp } from './admin-app';
 import { getFirebaseSetupStatus, installFirebaseSetup, isPermissionError, permissionHint } from './firebase-setup';
-import { resolveProjectId } from './admin-app';
+import { resolveProjectId, resolveStorageBucket } from './admin-app';
 import { caspianHandleSelfUpdate } from './self-update';
 import { registerStripe } from './functions-shim/stripe';
 
@@ -45,6 +45,8 @@ const CALLABLES: Record<string, CallableLoader> = {
       .demoteAdminToCustomer as unknown as ShimCallable,
   linkMyGuestOrders: async () =>
     (await import('../../firebase/functions-admin/src/link-guest-orders')).linkMyGuestOrders as unknown as ShimCallable,
+  getDownloadUrl: async () =>
+    (await import('../../firebase/functions-admin/src/get-download-url')).getDownloadUrl as unknown as ShimCallable,
   getGuestOrder: async () =>
     (await import('../../firebase/functions-admin/src/get-guest-order')).getGuestOrder as unknown as ShimCallable,
   createStripeCheckoutSession: async () =>
@@ -62,6 +64,7 @@ const CALLABLES: Record<string, CallableLoader> = {
 const EMBEDDED_CALLABLES = new Set([
   'linkMyGuestOrders',
   'getGuestOrder',
+  'getDownloadUrl',
   'createStripeCheckoutSession',
   'getStripeSession',
 ]);
@@ -274,6 +277,11 @@ function subPath(req: Request, basePath: string): string {
 export async function caspianHandleApi(req: Request, options: CaspianHandleApiOptions = {}): Promise<Response> {
   const path = subPath(req, options.basePath ?? '/api/caspian-store');
   if (options.stripe) registerStripe(options.stripe);
+  // Download links are signed against this bucket; a host's own Admin app may have no default.
+  if (!process.env.CASPIAN_STORAGE_BUCKET) {
+    const projectId = resolveProjectId();
+    if (projectId) process.env.CASPIAN_STORAGE_BUCKET = resolveStorageBucket(projectId);
+  }
   if (options.embedded || options.collectionPrefix !== undefined) {
     process.env.CASPIAN_COLLECTION_PREFIX = options.collectionPrefix ?? 'store_';
   }

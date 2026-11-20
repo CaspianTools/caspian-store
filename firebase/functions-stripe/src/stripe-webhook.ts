@@ -87,6 +87,7 @@ export const stripeWebhook = onRequest(
       let promoCode: string | null = null;
       let discount = 0;
       let shippingCost = 0;
+      let downloads: PendingCheckout['downloads'] = undefined;
       let tax = 0;
       let userEmail = '';
       let isGuest = false;
@@ -114,6 +115,7 @@ export const stripeWebhook = onRequest(
         tax = pending.tax ?? 0;
         userEmail = pending.userEmail ?? '';
         isGuest = pending.isGuest === true;
+        downloads = pending.downloads;
       } else {
         // Legacy sessions (created before v15.1) carry the cart in metadata.
         // Tag each parse so Cloud Logs + the error-logs collection show
@@ -208,6 +210,7 @@ export const stripeWebhook = onRequest(
             selectedSize: item.selectedSize ?? null,
             selectedColor: item.selectedColor ?? null,
             imageUrl: item.imageUrl ?? '',
+            ...(item.digital ? { digital: true } : {}),
           })),
           shippingInfo: shippingInfo ?? {},
           payment: {
@@ -223,12 +226,14 @@ export const stripeWebhook = onRequest(
           promoCode,
           total,
           ...(isGuest ? { isGuest: true } : {}),
+          ...(downloads && downloads.length > 0 ? { downloads } : {}),
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
         });
 
         // --- Decrement per-size stock (deleted products are skipped, not fatal) ---
         for (const item of items) {
+          if (item.digital) continue; // downloads have no stock
           if (!existingProducts.has(item.productId)) {
             console.warn(`[caspian-webhook] Product ${item.productId} gone; stock not decremented.`);
             continue;

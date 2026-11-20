@@ -80,6 +80,8 @@ service cloud.firestore {
                     && request.resource.data.items is list
                     && request.resource.data.items.size() > 0
                     && !('channel' in request.resource.data)
+                    // Download entitlements come only from the payment webhook.
+                    && !('downloads' in request.resource.data)
                     && request.resource.data.subtotal is number
                     && request.resource.data.subtotal >= 0
                     && request.resource.data.total is number
@@ -102,6 +104,12 @@ service cloud.firestore {
     // instead of writing a second order and decrementing stock twice.
     // Server-only for the same reason as pendingCheckouts.
     match /stripeEvents/{id} {
+      allow read, write: if false;
+    }
+
+    // Per-order download counts for digital products (v15.4.0), written only
+    // by the getDownloadUrl callable so a buyer cannot reset their own limit.
+    match /orderDownloads/{orderId} {
       allow read, write: if false;
     }
 
